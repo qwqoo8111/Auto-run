@@ -720,6 +720,204 @@ function areMediaUrlsMatching(
   return false;
 }
 
+// =========================================================================
+// Singleton Service: Global Channel Supervisor (ناظر سراسری کانال)
+// =========================================================================
+interface CachedMessageFingerprint {
+  id: string;
+  hash: string;
+  textFingerprint: string;
+  mediaHash?: string;
+  targetChannel: string;
+  sourceChannel: string;
+  connectionId: string;
+  timestamp: number;
+  captionSnippet: string;
+}
+
+class GlobalChannelSupervisorService {
+  private static instance: GlobalChannelSupervisorService;
+  private cacheBuffer: CachedMessageFingerprint[] = [];
+
+  private constructor() {}
+
+  public static getInstance(): GlobalChannelSupervisorService {
+    if (!GlobalChannelSupervisorService.instance) {
+      GlobalChannelSupervisorService.instance = new GlobalChannelSupervisorService();
+    }
+    return GlobalChannelSupervisorService.instance;
+  }
+
+  // Calculate normalized token fingerprint
+  public computeFingerprint(text: string): string {
+    if (!text) return "";
+    const words = text
+      .toLowerCase()
+      .replace(/[^\w\u0600-\u06FF\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+    return Array.from(new Set(words)).sort().join("-");
+  }
+
+  // Calculate deterministic content hash
+  public computeExactHash(text: string, mediaUrl?: string): string {
+    const normText = (text || "").replace(/\s+/g, "").toLowerCase();
+    const mediaBase = extractMediaBasename(mediaUrl || "");
+    const combined = normText + "||" + mediaBase;
+
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  public registerMessage(item: {
+    id: string;
+    caption: string;
+    mediaUrl?: string;
+    targetChannel: string;
+    sourceChannel: string;
+    connectionId: string;
+  }) {
+    if (!item.caption && !item.mediaUrl) return;
+
+    const exactHash = this.computeExactHash(item.caption, item.mediaUrl);
+    const fingerprint = this.computeFingerprint(item.caption);
+    const mediaHash = extractMediaBasename(item.mediaUrl || "");
+
+    const record: CachedMessageFingerprint = {
+      id: item.id,
+      hash: exactHash,
+      textFingerprint: fingerprint,
+      mediaHash,
+      targetChannel: (item.targetChannel || "").trim().toLowerCase(),
+      sourceChannel: item.sourceChannel || "",
+      connectionId: item.connectionId,
+      timestamp: Date.now(),
+      captionSnippet: (item.caption || "").slice(0, 100),
+    };
+
+    this.cacheBuffer = this.cacheBuffer.filter((c) => c.id !== item.id);
+    this.cacheBuffer.unshift(record);
+
+    if (this.cacheBuffer.length > 3000) {
+      this.cacheBuffer.pop();
+    }
+  }
+
+  public checkDuplicate(params: {
+    text: string;
+    mediaUrl?: string;
+    mediaItems?: { type: 'photo' | 'video'; url: string }[];
+    targetChannel: string;
+    connectionId: string;
+    settings?: AdvancedSettings;
+  }): { isDuplicate: boolean; similarity: number; reason?: string; matchedFromChannel?: string } {
+    const { text, mediaUrl, mediaItems, targetChannel, settings } = params;
+
+    if (!settings?.enableGlobalSupervisor) {
+      return { isDuplicate: false, similarity: 0 };
+    }
+
+    const algorithm = settings.globalHashAlgorithm || 'fuzzy_token';
+    const threshold = settings.globalSimilarityThreshold ?? 80;
+    const scope = settings.crossChannelScope || 'all_channels';
+    const cacheHours = settings.cacheBufferHours || 24;
+
+    const now = Date.now();
+    const maxAgeMs = cacheHours * 60 * 60 * 1000;
+    const cleanTarget = (targetChannel || "").trim().toLowerCase();
+
+    const activeBuffer = this.cacheBuffer.filter((item) => {
+      if (now - item.timestamp > maxAgeMs) return false;
+      if (scope === 'same_target_channel' && item.targetChannel !== cleanTarget) {
+        return false;
+      }
+      return true;
+    });
+
+    const newMediaBasename = extractMediaBasename(mediaUrl || (mediaItems && mediaItems[0]?.url) || "");
+    const currentExactHash = this.computeExactHash(text, mediaUrl);
+
+    for (const cached of activeBuffer) {
+      // 1. Exact Hash Matching
+      if (algorithm === 'exact_hash') {
+        if (currentExactHash === cached.hash && currentExactHash !== "0") {
+          return {
+            isDuplicate: true,
+            similarity: 100,
+            matchedFromChannel: cached.sourceChannel,
+            reason: `[هش دقیق الگوریتم MD5] محتوای پیام جدید دقیقاً با پست قبلاً ارسال‌شده (از کانال مبدأ ${cached.sourceChannel}) مطابقت کامل دارد.`,
+          };
+        }
+      }
+
+      // 2. Media Basename Cross-Check
+      if (newMediaBasename && cached.mediaHash && newMediaBasename === cached.mediaHash) {
+        return {
+          isDuplicate: true,
+          similarity: 100,
+          matchedFromChannel: cached.sourceChannel,
+          reason: `[هش رسانه] تصویر/ویدیوی این پست قبلاً از کانال مبدأ ${cached.sourceChannel} توسط ناظر سراسری ثبت شده است.`,
+        };
+      }
+
+      // 3. Text Similarity Fingerprint Match
+      if (text && cached.captionSnippet) {
+        const sim = calculateTextSimilarity(text, cached.captionSnippet);
+        if (sim >= threshold) {
+          return {
+            isDuplicate: true,
+            similarity: sim,
+            matchedFromChannel: cached.sourceChannel,
+            reason: `[اثرانگشت متنی] شباهت ${sim}٪ (بالاتر از آستانه ${threshold}٪) با پیام قبلاً ارسال‌شده از کانال مبدأ ${cached.sourceChannel}`,
+          };
+        }
+      }
+    }
+
+    return { isDuplicate: false, similarity: 0 };
+  }
+
+  public getStats() {
+    const now = Date.now();
+    const active24h = this.cacheBuffer.filter((i) => now - i.timestamp < 24 * 60 * 60 * 1000);
+    const channelsSet = new Set(active24h.map((i) => i.targetChannel));
+    return {
+      totalBufferedFingerprints: active24h.length,
+      monitoredChannelsCount: channelsSet.size,
+      lastUpdated: active24h[0] ? new Date(active24h[0].timestamp).toISOString() : null,
+      bufferStatus: 'active',
+    };
+  }
+
+  public clearCache() {
+    this.cacheBuffer = [];
+  }
+}
+
+const globalSupervisor = GlobalChannelSupervisorService.getInstance();
+
+// Warm up Global Channel Supervisor Singleton cache from existing saved messages
+try {
+  messages.filter(m => m.status === 'success').slice(0, 1000).forEach(msg => {
+    const conn = connections.find(c => c.id === msg.connectionId);
+    globalSupervisor.registerMessage({
+      id: msg.id,
+      caption: msg.caption || '',
+      mediaUrl: msg.mediaUrl || (msg.mediaItems && msg.mediaItems[0]?.url) || '',
+      targetChannel: msg.targetChannel || (conn ? conn.targetChannel : ''),
+      sourceChannel: conn ? conn.sourceChannel : '',
+      connectionId: msg.connectionId,
+    });
+  });
+} catch (e) {
+  console.error("Failed to populate initial Global Supervisor cache:", e);
+}
+
 // Per Target Channel Mutex Lock to prevent race conditions when multiple connections send to the same target channel
 const targetChannelLocks: Record<string, Promise<void>> = {};
 
@@ -1783,6 +1981,30 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         }
       }
 
+      // 2c. Singleton Global Channel Supervisor Check
+      const primaryMediaForGlobal = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
+      const globalDupCheck = globalSupervisor.checkDuplicate({
+        text: transformedText,
+        mediaUrl: primaryMediaForGlobal,
+        mediaItems: post.mediaItems,
+        targetChannel: conn.targetChannel,
+        connectionId: conn.id,
+        settings: conn.settings,
+      });
+
+      if (globalDupCheck.isDuplicate) {
+        addLog(
+          conn.id,
+          "warning",
+          `[ناظر سراسری کانال - Singleton] از انتشار پیام #${post.msgId} (از کانال مبدأ ${conn.sourceChannel}) جلوگیری شد. علت: ${globalDupCheck.reason}`,
+          post.type,
+          post.msgId
+        );
+        conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+        writeJsonFile(CONNECTIONS_FILE, connections);
+        continue;
+      }
+
     const filter = conn.settings?.contentFilter;
     const isTextOnlyFilter = filter === "text_only";
     const isVoiceOnlyFilter = filter === "voice_only";
@@ -1854,6 +2076,15 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
       messages.unshift(record);
       writeJsonFile(MESSAGES_FILE, messages);
       writeJsonFile(CONNECTIONS_FILE, connections);
+
+      globalSupervisor.registerMessage({
+        id: record.id,
+        caption: record.caption || "",
+        mediaUrl: record.mediaUrl,
+        targetChannel: conn.targetChannel,
+        sourceChannel: conn.sourceChannel,
+        connectionId: conn.id,
+      });
 
       addLog(
         conn.id,
@@ -2116,12 +2347,21 @@ app.put("/api/connections/:id/settings", (req, res) => {
     duplicateSimilarityThreshold: bodySettings.duplicateSimilarityThreshold ?? 80,
     duplicateAction: bodySettings.duplicateAction || 'skip',
     checkMediaDuplicate: bodySettings.checkMediaDuplicate !== undefined ? !!bodySettings.checkMediaDuplicate : true,
+    enableGlobalSupervisor: bodySettings.enableGlobalSupervisor !== undefined ? !!bodySettings.enableGlobalSupervisor : true,
+    globalHashAlgorithm: bodySettings.globalHashAlgorithm || 'fuzzy_token',
+    globalSimilarityThreshold: bodySettings.globalSimilarityThreshold ?? 80,
+    cacheBufferHours: bodySettings.cacheBufferHours || 24,
+    crossChannelScope: bodySettings.crossChannelScope || 'all_channels',
   };
 
   writeJsonFile(CONNECTIONS_FILE, connections);
-  addLog(conn.id, "info", "تنظیمات پیشرفته و سیستم ضدتکرار با موفقیت به‌روزرسانی شد.");
+  addLog(conn.id, "info", "تنظیمات پیشرفته، ناظر سراسری و سیستم ضدتکرار با موفقیت به‌روزرسانی شد.");
 
   res.json(conn);
+});
+
+app.get("/api/global-supervisor/stats", (req, res) => {
+  res.json(globalSupervisor.getStats());
 });
 
 app.post("/api/test-bale", async (req, res) => {

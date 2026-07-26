@@ -32,6 +32,12 @@ export interface AdvancedSettings {
   duplicateSimilarityThreshold?: number;
   duplicateAction?: 'skip' | 'delete_existing';
   checkMediaDuplicate?: boolean;
+  // Global Channel Supervisor
+  enableGlobalSupervisor?: boolean;
+  globalHashAlgorithm?: 'fingerprint' | 'exact_hash' | 'fuzzy_token';
+  globalSimilarityThreshold?: number;
+  cacheBufferHours?: number;
+  crossChannelScope?: 'all_channels' | 'same_target_channel';
 }
 
 export interface TelegramConnection {
