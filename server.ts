@@ -2986,7 +2986,7 @@ app.post("/api/admin/purchase-requests/:id/reject", (req, res) => {
   }
 });
 
-// Admin API: Export Full Backup
+// Admin API: Export Backup (Members, Passwords, Emails and Member Channels)
 app.get("/api/admin/backup/export", (req, res) => {
   try {
     const authUser = getAuthUser(req);
@@ -2994,24 +2994,29 @@ app.get("/api/admin/backup/export", (req, res) => {
       return res.status(403).json({ error: "دسترسی غیرمجاز." });
     }
 
+    const currentUsers = readJsonFile(USERS_FILE, users);
+    const currentConnections = readJsonFile(CONNECTIONS_FILE, connections);
+    const currentRequests = readJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests);
+
     const backupData = {
-      version: "1.0.0",
+      version: "1.1.0",
       exportedAt: new Date().toISOString(),
       exportedBy: authUser.username,
-      users: readJsonFile(USERS_FILE, users),
-      connections: readJsonFile(CONNECTIONS_FILE, connections),
-      purchaseRequests: readJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests),
-      logs: readJsonFile(LOGS_FILE, logs),
-      messages: readJsonFile(MESSAGES_FILE, messages),
+      note: "بکاپ اختصاصی اطلاعات اعضا (یوزرنیم، پسورد، ایمیل) و کانال‌های متصل اعضا (بدون پیام‌های منتقل‌شده)",
+      users: currentUsers,
+      connections: currentConnections,
+      purchaseRequests: currentRequests,
+      messages: [],
+      logs: [],
     };
 
     res.json(backupData);
   } catch (err: any) {
-    res.status(500).json({ error: "خطا در دریافت بکاپ سیستم." });
+    res.status(500).json({ error: "خطا در دریافت بکاپ سیستم: " + (err.message || "") });
   }
 });
 
-// Admin API: Import Full Backup
+// Admin API: Import Backup (Members and Member Channels)
 app.post("/api/admin/backup/import", (req, res) => {
   try {
     const authUser = getAuthUser(req);
@@ -3024,33 +3029,62 @@ app.post("/api/admin/backup/import", (req, res) => {
       return res.status(400).json({ error: "فرمت داده‌های بکاپ نامعتبر است." });
     }
 
-    const importedUsers = Array.isArray(backupData.users) ? backupData.users : [];
-    const importedConnections = Array.isArray(backupData.connections) ? backupData.connections : [];
-    const importedRequests = Array.isArray(backupData.purchaseRequests) ? backupData.purchaseRequests : [];
-    const importedLogs = Array.isArray(backupData.logs) ? backupData.logs : [];
-    const importedMessages = Array.isArray(backupData.messages) ? backupData.messages : [];
+    const importedUsers: User[] = Array.isArray(backupData.users) ? backupData.users : [];
+    const importedConnections: TelegramConnection[] = Array.isArray(backupData.connections) ? backupData.connections : [];
+    const importedRequests: any[] = Array.isArray(backupData.purchaseRequests) ? backupData.purchaseRequests : [];
 
     if (importedUsers.length === 0) {
       return res.status(400).json({ error: "فایل بکاپ ارسالی شامل هیچ کاربری نیست!" });
     }
 
-    // Preserve current admin account
-    let hasMainAdmin = importedUsers.some((u: any) => u.email === "amir.r.an37@gmail.com" || u.username === "amir.r.an37@gmail.com");
+    // Ensure all users have valid identification fields
+    importedUsers.forEach((u: any) => {
+      if (!u.id) u.id = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      if (!u.username && u.email) u.username = u.email;
+      if (!u.email && u.username) u.email = u.username;
+      if (!u.token) u.token = `token_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    });
+
+    // Ensure main admin exists and maintains access
+    let hasMainAdmin = importedUsers.some((u: any) => 
+      (u.email && u.email.toLowerCase() === ADMIN_EMAIL) || 
+      (u.username && u.username.toLowerCase() === ADMIN_EMAIL)
+    );
+
     if (!hasMainAdmin && adminUser) {
       importedUsers.unshift(adminUser);
+    } else {
+      const importedAdmin = importedUsers.find((u: any) => 
+        (u.email && u.email.toLowerCase() === ADMIN_EMAIL) || 
+        (u.username && u.username.toLowerCase() === ADMIN_EMAIL)
+      );
+      if (importedAdmin) {
+        importedAdmin.role = "admin";
+        importedAdmin.plan = "vip";
+        importedAdmin.subscriptionStatus = "active";
+        importedAdmin.subscriptionExpireAt = null;
+        importedAdmin.maxConnections = 100;
+        if (!importedAdmin.password) importedAdmin.password = "137819";
+      }
     }
 
     users = importedUsers;
     connections = importedConnections;
     purchaseRequests = importedRequests;
-    logs = importedLogs;
-    messages = importedMessages;
 
     writeJsonFile(USERS_FILE, users);
     writeJsonFile(CONNECTIONS_FILE, connections);
     writeJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests);
-    writeJsonFile(LOGS_FILE, logs);
-    writeJsonFile(MESSAGES_FILE, messages);
+
+    // If backup JSON happens to include messages/logs (e.g. legacy backup), restore them if provided
+    if (Array.isArray(backupData.messages) && backupData.messages.length > 0) {
+      messages = backupData.messages;
+      writeJsonFile(MESSAGES_FILE, messages);
+    }
+    if (Array.isArray(backupData.logs) && backupData.logs.length > 0) {
+      logs = backupData.logs;
+      writeJsonFile(LOGS_FILE, logs);
+    }
 
     // Re-trigger active connection synchronization
     connections.forEach((conn) => {
@@ -3061,7 +3095,7 @@ app.post("/api/admin/backup/import", (req, res) => {
 
     res.json({
       success: true,
-      message: `بکاپ کامل با موفقیت روی سرور جدید بارگذاری شد! تعداد ${users.length} کاربر و ${connections.length} اتصال انتقال یافتند.`,
+      message: `بکاپ کاربران و کانال‌ها با موفقیت روی سرور بازیابی شد! تعداد ${users.length} کاربر (همراه یوزرنیم، پسورد و ایمیل) و ${connections.length} کانال انتقال یافتند.`,
       stats: {
         usersCount: users.length,
         connectionsCount: connections.length,
