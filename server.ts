@@ -1618,6 +1618,7 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
     const preventDuplicates = conn.settings?.preventDuplicates ?? true;
     const similarityThreshold = conn.settings?.duplicateSimilarityThreshold ?? 80;
     const checkMedia = conn.settings?.checkMediaDuplicate ?? true;
+    const duplicateAction = conn.settings?.duplicateAction || 'skip';
 
     if (preventDuplicates) {
       const dupCheck = checkIsDuplicatePost(
@@ -1629,16 +1630,40 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
       );
 
       if (dupCheck.isDuplicate) {
-        addLog(
-          conn.id,
-          "warning",
-          `پست جدید #${post.msgId} به علت شباهت ${dupCheck.similarity}٪ با پست موجود در کانال ${conn.targetChannel} ارسال نشد (پست‌های قدیمی کانال محفوظ ماندند). علت: ${dupCheck.reason}`,
-          post.type,
-          post.msgId
-        );
-        conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
-        writeJsonFile(CONNECTIONS_FILE, connections);
-        continue;
+        if (duplicateAction === 'delete_existing' && dupCheck.matchedMsg && dupCheck.matchedMsg.targetMsgId) {
+          const delRes = await deleteTelegramMessage(conn.botToken, conn.targetChannel, dupCheck.matchedMsg.targetMsgId);
+          if (delRes.ok) {
+            dupCheck.matchedMsg.status = 'failed';
+            addLog(
+              conn.id,
+              "info",
+              `پست تکراری قدیمی #${dupCheck.matchedMsg.sourceMsgId} (شناسه پیام: ${dupCheck.matchedMsg.targetMsgId}) از کانال حذف شد تا پست جدید #${post.msgId} جایگزین گردد.`
+            );
+            writeJsonFile(MESSAGES_FILE, messages);
+          } else {
+            addLog(
+              conn.id,
+              "warning",
+              `خطا در حذف پست تکراری قدیمی تلگرام (${delRes.error}). ارسال پست جدید متوقف شد.`,
+              post.type,
+              post.msgId
+            );
+            conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+            writeJsonFile(CONNECTIONS_FILE, connections);
+            continue;
+          }
+        } else {
+          addLog(
+            conn.id,
+            "warning",
+            `پست جدید #${post.msgId} به علت شباهت ${dupCheck.similarity}٪ با پست موجود در کانال ${conn.targetChannel} ارسال نشد. علت: ${dupCheck.reason}`,
+            post.type,
+            post.msgId
+          );
+          conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+          writeJsonFile(CONNECTIONS_FILE, connections);
+          continue;
+        }
       }
     }
 

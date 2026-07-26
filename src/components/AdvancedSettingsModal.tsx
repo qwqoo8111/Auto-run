@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { 
   X, Plus, Trash2, Save, Sliders, Sparkles, CheckCircle2, RefreshCw, 
-  Eye, Replace, FileText, Filter, Bot, ShieldCheck, Tag, Link2, Globe, Cpu, Key, Lock, Crown
+  Eye, Replace, FileText, Filter, Bot, ShieldCheck, Tag, Link2, Globe, Cpu, Key, Lock, Crown,
+  CopyCheck, ShieldAlert
 } from 'lucide-react';
 import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User } from '../types';
-import { updateConnectionSettings, testAiApi, testBaleBot } from '../services/api';
+import { updateConnectionSettings, testAiApi, testBaleBot, cleanDuplicates } from '../services/api';
 
 interface AdvancedSettingsModalProps {
   connection: TelegramConnection | null;
@@ -137,8 +138,17 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [enableBale, setEnableBale] = useState<boolean>(false);
   const [baleTargetChannel, setBaleTargetChannel] = useState<string>('');
   const [baleBotToken, setBaleBotToken] = useState<string>('');
+  const [baleReplaceId, setBaleReplaceId] = useState<string>('');
   const [testingBale, setTestingBale] = useState<boolean>(false);
   const [baleStatusMsg, setBaleStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Duplicate Protection State
+  const [preventDuplicates, setPreventDuplicates] = useState<boolean>(true);
+  const [duplicateSimilarityThreshold, setDuplicateSimilarityThreshold] = useState<number>(80);
+  const [duplicateAction, setDuplicateAction] = useState<'skip' | 'delete_existing'>('skip');
+  const [checkMediaDuplicate, setCheckMediaDuplicate] = useState<boolean>(true);
+  const [cleaningDuplicates, setCleaningDuplicates] = useState<boolean>(false);
+  const [cleanDuplicatesResult, setCleanDuplicatesResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (connection) {
@@ -168,9 +178,15 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setCleanTagsAndLinks(!!s.cleanTagsAndLinks);
       setContentFilter(s.contentFilter || 'all');
 
+      setPreventDuplicates(s.preventDuplicates !== undefined ? !!s.preventDuplicates : true);
+      setDuplicateSimilarityThreshold(s.duplicateSimilarityThreshold ?? 80);
+      setDuplicateAction(s.duplicateAction || 'skip');
+      setCheckMediaDuplicate(s.checkMediaDuplicate !== undefined ? !!s.checkMediaDuplicate : true);
+
       setEnableBale(!!s.enableBale || !!connection.enableBale);
       setBaleTargetChannel(s.baleTargetChannel || connection.baleTargetChannel || '');
       setBaleBotToken(s.baleBotToken || connection.baleBotToken || '');
+      setBaleReplaceId(s.baleReplaceId || connection.baleReplaceId || '');
 
       setSampleText(
         `پست جدید در کانال ${connection.sourceChannel}\nبرای خرید و ثبت سفارش به آیدی ${connection.sourceChannel} پیام دهید.\nلینک کانال: https://t.me/${connection.sourceChannel.replace('@', '')}\n#فروشگاه #تخفیف`
@@ -342,6 +358,21 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     }
   };
 
+  const handleCleanDuplicatesNow = async () => {
+    if (!connection) return;
+    setCleaningDuplicates(true);
+    setCleanDuplicatesResult(null);
+    try {
+      const res = await cleanDuplicates(connection.id);
+      setCleanDuplicatesResult({ ok: res.ok, message: res.message });
+      onSaved();
+    } catch (err: any) {
+      setCleanDuplicatesResult({ ok: false, message: err.message || 'خطا در پاکسازی پست‌های تکراری' });
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSavedSuccess(false);
@@ -363,6 +394,11 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         enableBale,
         baleTargetChannel: baleTargetChannel.trim(),
         baleBotToken: baleBotToken.trim(),
+        baleReplaceId: baleReplaceId.trim(),
+        preventDuplicates,
+        duplicateSimilarityThreshold,
+        duplicateAction,
+        checkMediaDuplicate,
       };
       await updateConnectionSettings(connection.id, newSettings);
       setSavedSuccess(true);
@@ -760,6 +796,162 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             </div>
           </div>
 
+          {/* Section 3.5: Duplicate Detection & Prevention (تشخیص و پاکسازی پست‌های تکراری) */}
+          <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
+              <div className="flex items-center gap-2">
+                <CopyCheck className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص و جلوگیـری از پست‌های تکراری</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    الگوریتم هوشمند سنجش شباهت محتوا و پاکسازی اتوماتیک پست‌های تکراری در کانال مقصد
+                  </p>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
+                <input
+                  type="checkbox"
+                  checked={preventDuplicates}
+                  onChange={(e) => setPreventDuplicates(e.target.checked)}
+                  className="w-4 h-4 accent-amber-400 rounded"
+                />
+                <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
+              </label>
+            </div>
+
+            {preventDuplicates && (
+              <div className="space-y-4 animate-fadeIn pt-1">
+                {/* Threshold Selection */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
+                    <span>۱. درصد آستانه تشخیص شباهت متنی:</span>
+                    <span className="text-amber-400 font-extrabold dir-ltr text-xs">{duplicateSimilarityThreshold}٪ شباهت</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { val: 70, label: '۷۰٪ (حساسیت بالا)', desc: 'شناسایی کوچکترین شباهت‌ها' },
+                      { val: 80, label: '۸۰٪ (پیش‌فرض استاندارد)', desc: 'متعادل و پیشنهادی' },
+                      { val: 90, label: '۹۰٪ (حساسیت متوسط)', desc: 'فقط متن‌های بسیار مشابه' },
+                      { val: 95, label: '۹۵٪ (حساسیت دقیق)', desc: 'فقط پست‌های کاملاً همسان' },
+                    ].map((item) => (
+                      <button
+                        type="button"
+                        key={item.val}
+                        onClick={() => setDuplicateSimilarityThreshold(item.val)}
+                        className={`p-2.5 rounded-xl border text-right transition-all ${
+                          duplicateSimilarityThreshold === item.val
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold shadow-md'
+                            : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
+                        }`}
+                      >
+                        <span className="text-xs font-bold block">{item.label}</span>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">{item.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Safety Guarantee Notice */}
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-200 text-xs flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-blue-400 shrink-0" />
+                  <div>
+                    <span className="font-bold block">تضمین امنیت پست‌های قدیمی کانال:</span>
+                    <span className="text-[11px] text-slate-300">
+                      پست‌های قدیمی‌تر موجود در کانال شما کاملاً محفوظ باقی می‌مانند و هیچ پستی از قبل حذف نخواهد شد. فقط در صورتی که پست جدیدی با پست‌های قبلی بیش از {duplicateSimilarityThreshold}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Duplicate Action Behavior */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-200">
+                    ۲. اقدام هنگام مواجهه با پست تکراری جدید:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateAction('skip')}
+                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                        duplicateAction === 'skip'
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold shadow-md'
+                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block">🚫 عدم ارسال پست جدید (پیش‌فرض)</span>
+                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
+                        پست جدید ارسال نمی‌شود و پست‌های قبلی کانال بدون تغییر حفظ می‌شوند.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateAction('delete_existing')}
+                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                        duplicateAction === 'delete_existing'
+                          ? 'bg-rose-500/20 border-rose-400 text-rose-300 font-bold shadow-md'
+                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block">🗑️ حذف پست قدیمی و جایگزینی با پست جدید</span>
+                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
+                        پست تکراری قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Media Check Option */}
+                <label className="flex items-center gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={checkMediaDuplicate}
+                    onChange={(e) => setCheckMediaDuplicate(e.target.checked)}
+                    className="w-4 h-4 accent-amber-400 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-white block">بررسی و تطابق فایل‌های رسانه‌ای (عکس و ویدیو)</span>
+                    <span className="text-slate-400 mt-0.5 block text-[11px]">
+                      در صورت یکسان بودن تصویر یا ویدیوی دو پست، به عنوان پست تکراری شناسایی شده و بر اساس تنظیم فوق اقدام می‌شود.
+                    </span>
+                  </div>
+                </label>
+
+                {/* Manual Scan and Clean Duplicates Button */}
+                <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-amber-300 block">پاکسازی فوری پست‌های تکراری موجود در کانال</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        اسکن هوشمند تمام پست‌های منتقل‌شده قبلی در کانال مقصد و حذف موارد تکراری
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCleanDuplicatesNow}
+                      disabled={cleaningDuplicates}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <CopyCheck className={`w-4 h-4 ${cleaningDuplicates ? 'animate-spin' : ''}`} />
+                      <span>{cleaningDuplicates ? 'در حال اسکن و پاکسازی...' : 'اسکن و پاکسازی آنلاین'}</span>
+                    </button>
+                  </div>
+
+                  {cleanDuplicatesResult && (
+                    <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                      cleanDuplicatesResult.ok 
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' 
+                        : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+                    }`}>
+                      <span className="font-bold">{cleanDuplicatesResult.message}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Section 4: Signature / Tag (افزودن امضا یا تگ اختصاصی به پیام) */}
           <div className="space-y-2">
             <label className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -845,7 +1037,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   💡 راهنما: ربات ساخته شده توسط <strong>BotFather@</strong> در بله را مدیر (Admin) کانال یا گروه مقصد کنید و توکن را وارد نمایید.
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-slate-200">
                       کانال یا گروه مقصد در بله
@@ -856,6 +1048,22 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                         value={baleTargetChannel}
                         onChange={(e) => setBaleTargetChannel(e.target.value)}
                         placeholder="مثال: my_bale_channel@"
+                        className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-200 flex items-center justify-between">
+                      <span>جایگزین آیدی در بله (اختیاری)</span>
+                      <span className="text-[9px] text-emerald-400 font-normal">در متن پست‌ها</span>
+                    </label>
+                    <div className="neu-inset p-1 flex items-center">
+                      <input
+                        type="text"
+                        value={baleReplaceId}
+                        onChange={(e) => setBaleReplaceId(e.target.value)}
+                        placeholder="مثال: my_bale_id@ یا ble.ir/id"
                         className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
                       />
                     </div>
