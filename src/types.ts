@@ -27,6 +27,11 @@ export interface AdvancedSettings {
   enableBale?: boolean;
   baleTargetChannel?: string;
   baleBotToken?: string;
+  baleReplaceId?: string;
+  preventDuplicates?: boolean;
+  duplicateSimilarityThreshold?: number;
+  duplicateAction?: 'skip' | 'delete_existing';
+  checkMediaDuplicate?: boolean;
 }
 
 export interface TelegramConnection {
@@ -45,6 +50,7 @@ export interface TelegramConnection {
   enableBale?: boolean;
   baleTargetChannel?: string;
   baleBotToken?: string;
+  baleReplaceId?: string;
   settings?: AdvancedSettings;
 }
 
@@ -62,11 +68,14 @@ export interface ForwardedMessageRecord {
   id: string;
   connectionId: string;
   sourceMsgId: number;
+  targetMsgId?: number;
+  targetChannel?: string;
   type: 'text' | 'photo' | 'video' | 'document' | 'audio' | 'voice' | 'video_note' | 'animation' | 'media_group';
   caption?: string;
   transferredAt: string;
   status: 'success' | 'failed';
   mediaUrl?: string;
+  mediaItems?: { type: 'photo' | 'video'; url: string }[];
 }
 
 export interface CreateConnectionDTO {
@@ -76,6 +85,7 @@ export interface CreateConnectionDTO {
   enableBale?: boolean;
   baleTargetChannel?: string;
   baleBotToken?: string;
+  baleReplaceId?: string;
   settings?: AdvancedSettings;
 }
 

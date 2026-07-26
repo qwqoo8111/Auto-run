@@ -658,14 +658,78 @@ function calculateTextSimilarity(str1: string, str2: string): number {
   return Math.round(Math.max(wordJaccard, ngramDice));
 }
 
+// Duplicate Detection Helpers
+function normalizeMediaUrl(url?: string): string {
+  if (!url) return "";
+  try {
+    let clean = url.split("?")[0].split("#")[0].trim();
+    clean = clean.replace(/^https?:\/\/[^\/]+/i, "");
+    return clean.toLowerCase();
+  } catch {
+    return (url || "").toLowerCase().trim();
+  }
+}
+
+function extractMediaBasename(url?: string): string {
+  if (!url) return "";
+  const clean = normalizeMediaUrl(url);
+  const name = clean.split("/").pop() || "";
+  return name.length > 5 ? name : clean;
+}
+
+function areMediaUrlsMatching(
+  url1?: string,
+  url2?: string,
+  items1?: { type: string; url: string }[],
+  items2?: { type: string; url: string }[]
+): boolean {
+  const list1: string[] = [];
+  if (url1) list1.push(url1);
+  if (items1 && Array.isArray(items1)) {
+    items1.forEach((it) => { if (it?.url) list1.push(it.url); });
+  }
+
+  const list2: string[] = [];
+  if (url2) list2.push(url2);
+  if (items2 && Array.isArray(items2)) {
+    items2.forEach((it) => { if (it?.url) list2.push(it.url); });
+  }
+
+  if (list1.length === 0 || list2.length === 0) return false;
+
+  const baseNames1 = list1.map(extractMediaBasename).filter(Boolean);
+  const baseNames2 = list2.map(extractMediaBasename).filter(Boolean);
+
+  for (const b1 of baseNames1) {
+    for (const b2 of baseNames2) {
+      if (b1 === b2) return true;
+    }
+  }
+
+  const norm1 = list1.map(normalizeMediaUrl).filter(Boolean);
+  const norm2 = list2.map(normalizeMediaUrl).filter(Boolean);
+
+  for (const n1 of norm1) {
+    for (const n2 of norm2) {
+      if (n1 === n2 || (n1.length > 15 && n2.length > 15 && (n1.includes(n2) || n2.includes(n1)))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function checkIsDuplicatePost(
   targetChannel: string,
   newPostText: string,
   mediaUrl?: string,
   thresholdPercent: number = 80,
-  checkMedia: boolean = true
+  checkMedia: boolean = true,
+  mediaItems?: { type: 'photo' | 'video'; url: string }[],
+  sourceMsgId?: number
 ): { isDuplicate: boolean; similarity: number; matchedMsg?: ForwardedMessageRecord; reason?: string } {
-  if (!newPostText && !mediaUrl) {
+  if (!newPostText && !mediaUrl && (!mediaItems || mediaItems.length === 0) && !sourceMsgId) {
     return { isDuplicate: false, similarity: 0 };
   }
 
@@ -675,15 +739,29 @@ function checkIsDuplicatePost(
   );
 
   for (const prevMsg of targetMessages.slice(0, 300)) {
-    if (checkMedia && mediaUrl && prevMsg.mediaUrl && mediaUrl === prevMsg.mediaUrl) {
+    // 1. Direct Source Msg ID match in same target channel
+    if (sourceMsgId && prevMsg.sourceMsgId && prevMsg.sourceMsgId === sourceMsgId) {
       return {
         isDuplicate: true,
         similarity: 100,
         matchedMsg: prevMsg,
-        reason: "تطابق دقیق تصویر/ویدیو در کانال مقصد",
+        reason: `پست با شماره شناسه #${sourceMsgId} قبلاً به کانال ${targetChannel} منتقل شده است.`,
       };
     }
 
+    // 2. Media matching
+    if (checkMedia) {
+      if (areMediaUrlsMatching(mediaUrl, prevMsg.mediaUrl, mediaItems, prevMsg.mediaItems)) {
+        return {
+          isDuplicate: true,
+          similarity: 100,
+          matchedMsg: prevMsg,
+          reason: "تطابق تصویر/ویدیوی فایل‌های رسانه‌ای در کانال مقصد",
+        };
+      }
+    }
+
+    // 3. Text Similarity matching
     if (newPostText && prevMsg.caption) {
       const sim = calculateTextSimilarity(newPostText, prevMsg.caption);
       if (sim >= thresholdPercent) {
@@ -1621,12 +1699,15 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
     const duplicateAction = conn.settings?.duplicateAction || 'skip';
 
     if (preventDuplicates) {
+      const primaryMediaUrl = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
       const dupCheck = checkIsDuplicatePost(
         conn.targetChannel,
         transformedText,
-        post.photoUrl || post.videoUrl,
+        primaryMediaUrl,
         similarityThreshold,
-        checkMedia
+        checkMedia,
+        post.mediaItems,
+        post.msgId
       );
 
       if (dupCheck.isDuplicate) {
@@ -1732,7 +1813,8 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         caption: transformedText,
         transferredAt: new Date().toISOString(),
         status: "success",
-        mediaUrl: post.photoUrl || post.videoUrl,
+        mediaUrl: post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url),
+        mediaItems: post.mediaItems,
       };
       messages.unshift(record);
       writeJsonFile(MESSAGES_FILE, messages);
@@ -2214,7 +2296,10 @@ app.post("/api/connections/:id/clean-duplicates", async (req, res) => {
         let isDup = false;
         let sim = 0;
 
-        if (checkMedia && current.mediaUrl && compareWith.mediaUrl && current.mediaUrl === compareWith.mediaUrl) {
+        if (current.sourceMsgId && compareWith.sourceMsgId && current.sourceMsgId === compareWith.sourceMsgId) {
+          isDup = true;
+          sim = 100;
+        } else if (checkMedia && areMediaUrlsMatching(current.mediaUrl, compareWith.mediaUrl, current.mediaItems, compareWith.mediaItems)) {
           isDup = true;
           sim = 100;
         } else if (current.caption && compareWith.caption) {
