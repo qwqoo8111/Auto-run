@@ -823,42 +823,79 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             {preventDuplicates && (
               <div className="space-y-4 animate-fadeIn pt-1">
                 {/* Threshold Selection */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
-                    <span>۱. درصد آستانه تشخیص شباهت متنی:</span>
-                    <span className="text-amber-400 font-extrabold dir-ltr text-xs">{duplicateSimilarityThreshold}٪ شباهت</span>
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <span>۱. درصد آستانه تشخیص شباهت:</span>
+                    </label>
+                    <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
+                      {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
+                    </span>
+                  </div>
+
+                  {/* Range Slider for granular sensitivity selection */}
+                  <div className="space-y-1">
+                    <input
+                      type="range"
+                      min={50}
+                      max={100}
+                      step={5}
+                      value={duplicateSimilarityThreshold}
+                      onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
+                      className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                      <span>۵۰٪ (بسیار حساس)</span>
+                      <span>۸۰٪ (پیش‌فرض)</span>
+                      <span>۱۰۰٪ (کاملاً یکسان)</span>
+                    </div>
+                  </div>
+
+                  {/* Preset Buttons */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 pt-1">
                     {[
-                      { val: 70, label: '۷۰٪ (حساسیت بالا)', desc: 'شناسایی کوچکترین شباهت‌ها' },
-                      { val: 80, label: '۸۰٪ (پیش‌فرض استاندارد)', desc: 'متعادل و پیشنهادی' },
-                      { val: 90, label: '۹۰٪ (حساسیت متوسط)', desc: 'فقط متن‌های بسیار مشابه' },
-                      { val: 95, label: '۹۵٪ (حساسیت دقیق)', desc: 'فقط پست‌های کاملاً همسان' },
+                      { val: 50, label: '۵۰٪', desc: 'خیلی حساس' },
+                      { val: 60, label: '۶۰٪', desc: 'حساسیت بالا' },
+                      { val: 70, label: '۷۰٪', desc: 'حساسیت متوسط' },
+                      { val: 80, label: '۸۰٪', desc: 'استاندارد' },
+                      { val: 90, label: '۹۰٪', desc: 'دقت بالا' },
+                      { val: 95, label: '۹۵٪', desc: 'بسیار دقیق' },
+                      { val: 100, label: '۱۰۰٪', desc: 'کاملاً عینا' },
                     ].map((item) => (
                       <button
                         type="button"
                         key={item.val}
                         onClick={() => setDuplicateSimilarityThreshold(item.val)}
-                        className={`p-2.5 rounded-xl border text-right transition-all ${
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
                           duplicateSimilarityThreshold === item.val
-                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold shadow-md'
-                            : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
+                            ? 'bg-amber-500/25 border-amber-400 text-amber-300 font-extrabold shadow-md scale-102'
+                            : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
                         }`}
                       >
-                        <span className="text-xs font-bold block">{item.label}</span>
-                        <span className="text-[10px] text-slate-500 block mt-0.5">{item.desc}</span>
+                        <span className="text-xs font-extrabold block">{item.label}</span>
+                        <span className="text-[9px] text-slate-400 block mt-0.5">{item.desc}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Safety Guarantee Notice */}
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-200 text-xs flex items-center gap-2.5">
-                  <ShieldCheck className="w-5 h-5 text-blue-400 shrink-0" />
+                {/* Dynamic Guarantee Notice */}
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2.5 ${
+                  duplicateAction === 'delete_existing'
+                    ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+                    : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'
+                }`}>
+                  <ShieldCheck className={`w-5 h-5 shrink-0 ${duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-blue-400'}`} />
                   <div>
-                    <span className="font-bold block">تضمین امنیت پست‌های قدیمی کانال:</span>
-                    <span className="text-[11px] text-slate-300">
-                      پست‌های قدیمی‌تر موجود در کانال شما کاملاً محفوظ باقی می‌مانند و هیچ پستی از قبل حذف نخواهد شد. فقط در صورتی که پست جدیدی با پست‌های قبلی بیش از {duplicateSimilarityThreshold}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.
+                    <span className="font-bold block">
+                      {duplicateAction === 'delete_existing'
+                        ? 'توضیحات جایگزینی خودکار پست تکراری:'
+                        : 'تضمین عدم ارسال پست‌های تکراری:'}
+                    </span>
+                    <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                      {duplicateAction === 'delete_existing'
+                        ? `هرگاه پست جدیدی با یکی از پست‌های قبلی کانال بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، پست قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.`
+                        : `پست‌های قدیمی کانال محفوظ می‌مانند. اگر پست جدیدی با پست‌های قبلی بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.`}
                     </span>
                   </div>
                 </div>

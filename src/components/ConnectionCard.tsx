@@ -139,7 +139,7 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
               title="سیستم هوشمند جلوگیری و پاکسازی پست‌های تکراری فعال است"
             >
               <CopyCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>ضد تکرار فعال ({connection.settings?.duplicateSimilarityThreshold ?? 80}٪)</span>
+              <span>ضد تکرار فعال ({(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)</span>
             </button>
           )}
 
