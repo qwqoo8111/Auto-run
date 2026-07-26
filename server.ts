@@ -2011,6 +2011,10 @@ app.post("/api/connections", async (req, res) => {
         baleTargetChannel: baleTargetChannel?.trim() || "",
         baleBotToken: baleBotToken?.trim() || "",
         baleReplaceId: resolvedBaleReplaceId || "",
+        preventDuplicates: true,
+        duplicateSimilarityThreshold: 80,
+        duplicateAction: 'skip',
+        checkMediaDuplicate: true,
       },
     };
 
@@ -2037,22 +2041,9 @@ app.put("/api/connections/:id/settings", (req, res) => {
   const conn = connections.find((c) => c.id === req.params.id);
   if (!conn) return res.status(404).json({ error: "اتصال یافت نشد" });
 
-  const {
-    rewriteMode,
-    aiPrompt,
-    geminiApiKey,
-    replacements,
-    signature,
-    removeSourceLinks,
-    cleanTagsAndLinks,
-    contentFilter,
-    enableBale,
-    baleTargetChannel,
-    baleBotToken,
-    baleReplaceId
-  }: AdvancedSettings = req.body;
+  const bodySettings: AdvancedSettings = req.body;
 
-  if (enableBale) {
+  if (bodySettings.enableBale) {
     const authUser = getAuthUser(req);
     if (authUser && authUser.role !== 'admin' && (authUser.plan === 'free' || authUser.subscriptionStatus !== 'active')) {
       return res.status(403).json({
@@ -2061,28 +2052,38 @@ app.put("/api/connections/:id/settings", (req, res) => {
     }
   }
 
-  conn.enableBale = !!enableBale;
-  if (baleTargetChannel !== undefined) conn.baleTargetChannel = baleTargetChannel.trim();
-  if (baleBotToken !== undefined) conn.baleBotToken = baleBotToken.trim();
-  if (baleReplaceId !== undefined) conn.baleReplaceId = baleReplaceId.trim();
+  conn.enableBale = !!bodySettings.enableBale;
+  if (bodySettings.baleTargetChannel !== undefined) conn.baleTargetChannel = bodySettings.baleTargetChannel.trim();
+  if (bodySettings.baleBotToken !== undefined) conn.baleBotToken = bodySettings.baleBotToken.trim();
+  if (bodySettings.baleReplaceId !== undefined) conn.baleReplaceId = bodySettings.baleReplaceId.trim();
 
   conn.settings = {
-    rewriteMode: rewriteMode || "none",
-    aiPrompt: aiPrompt || "",
-    geminiApiKey: geminiApiKey || "",
-    replacements: replacements || [],
-    signature: signature || "",
-    removeSourceLinks: !!removeSourceLinks,
-    cleanTagsAndLinks: !!cleanTagsAndLinks,
-    contentFilter: contentFilter || "all",
-    enableBale: !!enableBale,
-    baleTargetChannel: baleTargetChannel?.trim() || "",
-    baleBotToken: baleBotToken?.trim() || "",
-    baleReplaceId: baleReplaceId?.trim() || "",
+    ...(conn.settings || {}),
+    ...bodySettings,
+    rewriteMode: bodySettings.rewriteMode || "none",
+    aiPrompt: bodySettings.aiPrompt || "",
+    aiProvider: bodySettings.aiProvider || "gemini",
+    aiApiKey: bodySettings.aiApiKey || "",
+    aiModel: bodySettings.aiModel || "gemini-2.5-flash",
+    aiCustomBaseUrl: bodySettings.aiCustomBaseUrl || "",
+    geminiApiKey: bodySettings.geminiApiKey || bodySettings.aiApiKey || "",
+    replacements: bodySettings.replacements || [],
+    signature: bodySettings.signature || "",
+    removeSourceLinks: !!bodySettings.removeSourceLinks,
+    cleanTagsAndLinks: !!bodySettings.cleanTagsAndLinks,
+    contentFilter: bodySettings.contentFilter || "all",
+    enableBale: !!bodySettings.enableBale,
+    baleTargetChannel: bodySettings.baleTargetChannel?.trim() || "",
+    baleBotToken: bodySettings.baleBotToken?.trim() || "",
+    baleReplaceId: bodySettings.baleReplaceId?.trim() || "",
+    preventDuplicates: bodySettings.preventDuplicates !== undefined ? !!bodySettings.preventDuplicates : true,
+    duplicateSimilarityThreshold: bodySettings.duplicateSimilarityThreshold ?? 80,
+    duplicateAction: bodySettings.duplicateAction || 'skip',
+    checkMediaDuplicate: bodySettings.checkMediaDuplicate !== undefined ? !!bodySettings.checkMediaDuplicate : true,
   };
 
   writeJsonFile(CONNECTIONS_FILE, connections);
-  addLog(conn.id, "info", "تنظیمات پیشرفته و فیلترها (به همراه تنظیمات بله) با موفقیت به‌روزرسانی شد.");
+  addLog(conn.id, "info", "تنظیمات پیشرفته و سیستم ضدتکرار با موفقیت به‌روزرسانی شد.");
 
   res.json(conn);
 });

@@ -132,14 +132,34 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
             </span>
           )}
 
-          {(connection.settings?.preventDuplicates ?? true) && (
+          {connection.settings?.preventDuplicates !== false ? (
             <button
               onClick={() => onOpenSettings(connection)}
-              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1 hover:bg-amber-500/20 transition-colors"
-              title="سیستم هوشمند جلوگیری و پاکسازی پست‌های تکراری فعال است"
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                connection.settings?.duplicateAction === 'delete_existing'
+                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
+                  : 'bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+              }`}
+              title={
+                connection.settings?.duplicateAction === 'delete_existing'
+                  ? "سیستم جایگزینی خودکار پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
+                  : "سیستم هوشمند جلوگیری از ارسال پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
+              }
             >
-              <CopyCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>ضد تکرار فعال ({(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)</span>
+              <CopyCheck className={`w-3.5 h-3.5 ${connection.settings?.duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-amber-400'}`} />
+              <span>
+                {connection.settings?.duplicateAction === 'delete_existing' ? 'ضد تکرار و جایگزینی (' : 'ضد تکرار فعال ('}
+                {(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => onOpenSettings(connection)}
+              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1 hover:bg-slate-700/50 transition-colors cursor-pointer"
+              title="سیستم جلوگیری از پست‌های تکراری غیرفعال است"
+            >
+              <CopyCheck className="w-3.5 h-3.5 text-slate-500" />
+              <span>ضد تکرار غیرفعال</span>
             </button>
           )}
 
