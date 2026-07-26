@@ -26,6 +26,9 @@ async function safeJsonFetch(url: string, options?: RequestInit, maxRetries = 5)
         if (data && data.error) {
           throw new Error(data.error);
         }
+        if (res.status === 401 || res.status === 403) {
+          throw new Error(data?.error || `نشست کاری منقضی شده است یا دسترسی غیرمجاز است (${res.status})`);
+        }
         if (res.status >= 500 && attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
           continue;
@@ -48,6 +51,9 @@ async function safeJsonFetch(url: string, options?: RequestInit, maxRetries = 5)
       throw new Error('پاسخ خالی یا نامعتبر از سرور دریافت شد.');
     } catch (err: any) {
       lastErr = err;
+      if (err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('دسترسی غیرمجاز') || err.message.includes('منقضی'))) {
+        throw err;
+      }
       if (attempt < maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
         continue;
@@ -104,6 +110,10 @@ export async function sendTestMessage(id: string): Promise<{ success: boolean; t
 
 export async function triggerManualSync(id: string): Promise<TelegramConnection> {
   return safeJsonFetch(`/api/connections/${id}/sync`, { method: 'POST' });
+}
+
+export async function cleanDuplicates(id: string): Promise<{ ok: boolean; deletedCount: number; message: string; errors?: string[] }> {
+  return safeJsonFetch(`/api/connections/${id}/clean-duplicates`, { method: 'POST' });
 }
 
 export async function testAiApi(payload: {

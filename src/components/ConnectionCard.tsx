@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Pause, Play, Trash2, FileText, Send, RefreshCw, Activity, 
   ArrowLeft, Clock, MessageSquare, Bot, AlertTriangle, CheckCircle2,
-  List, Sliders, Replace
+  List, Sliders, Replace, CopyCheck
 } from 'lucide-react';
 import { TelegramConnection } from '../types';
 
@@ -126,7 +126,21 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm" title={`ارسال همزمان به کانال بله (${baleTarget})`}>
               <span className="text-emerald-400 font-extrabold">🇮🇷 بله:</span>
               <span className="dir-ltr">{baleTarget || 'فعال'}</span>
+              {(connection.baleReplaceId || connection.settings?.baleReplaceId) && (
+                <span className="text-[10px] text-emerald-400/80 dir-ltr">(جایگزین: {connection.baleReplaceId || connection.settings?.baleReplaceId})</span>
+              )}
             </span>
+          )}
+
+          {(connection.settings?.preventDuplicates ?? true) && (
+            <button
+              onClick={() => onOpenSettings(connection)}
+              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1 hover:bg-amber-500/20 transition-colors"
+              title="سیستم هوشمند جلوگیری و پاکسازی پست‌های تکراری فعال است"
+            >
+              <CopyCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>ضد تکرار فعال ({connection.settings?.duplicateSimilarityThreshold ?? 80}٪)</span>
+            </button>
           )}
 
           {hasCustomSettings && (

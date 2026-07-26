@@ -26,6 +26,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
   const [enableBale, setEnableBale] = useState(false);
   const [baleTargetChannel, setBaleTargetChannel] = useState('');
   const [baleBotToken, setBaleBotToken] = useState('');
+  const [baleReplaceId, setBaleReplaceId] = useState('');
   const [testingBale, setTestingBale] = useState(false);
   const [baleStatusMsg, setBaleStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -85,6 +86,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
         enableBale,
         baleTargetChannel: enableBale ? baleTargetChannel.trim() : undefined,
         baleBotToken: enableBale ? baleBotToken.trim() : undefined,
+        baleReplaceId: enableBale && baleReplaceId.trim() ? baleReplaceId.trim() : undefined,
       });
       // Clear fields upon success
       setSourceChannel('');
@@ -93,6 +95,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
       setEnableBale(false);
       setBaleTargetChannel('');
       setBaleBotToken('');
+      setBaleReplaceId('');
       setBaleStatusMsg(null);
     } catch (err: any) {
       setError(err.message || 'خطا در ثبت و برقراری اتصال');
@@ -241,7 +244,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
                   💡 راهنما: در پیام‌رسان بله ربات‌ساز <strong>BotFather@</strong> را باز کنید و یک ربات جدید بسازید. ربات را مدیر (Admin) کانال بله خود کرده و توکن آن را در زیر وارد کنید:
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="block text-xs font-bold text-slate-200">
                       کانال یا گروه مقصد در بله
@@ -252,6 +255,22 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
                         value={baleTargetChannel}
                         onChange={(e) => setBaleTargetChannel(e.target.value)}
                         placeholder="مثال: my_bale_channel@ یا id_channel"
+                        className="w-full bg-transparent px-3 py-2 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
+                      <span>جایگزین آیدی در بله (اختیاری)</span>
+                      <span className="text-[10px] text-emerald-400 font-normal">در متن پست‌ها</span>
+                    </label>
+                    <div className="neu-inset p-1 flex items-center">
+                      <input
+                        type="text"
+                        value={baleReplaceId}
+                        onChange={(e) => setBaleReplaceId(e.target.value)}
+                        placeholder="مثال: my_bale_id@ یا ble.ir/id"
                         className="w-full bg-transparent px-3 py-2 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
                       />
                     </div>
