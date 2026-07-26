@@ -720,6 +720,32 @@ function areMediaUrlsMatching(
   return false;
 }
 
+// Per Target Channel Mutex Lock to prevent race conditions when multiple connections send to the same target channel
+const targetChannelLocks: Record<string, Promise<void>> = {};
+
+function acquireTargetChannelLock<T>(targetChannel: string, fn: () => Promise<T>): Promise<T> {
+  const cleanTarget = (targetChannel || "default").trim().toLowerCase();
+  if (!targetChannelLocks[cleanTarget]) {
+    targetChannelLocks[cleanTarget] = Promise.resolve();
+  }
+
+  let release: () => void;
+  const nextPromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const prevLock = targetChannelLocks[cleanTarget];
+  targetChannelLocks[cleanTarget] = prevLock.then(() => nextPromise, () => nextPromise);
+
+  return prevLock.then(async () => {
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  });
+}
+
 function checkIsDuplicatePost(
   targetChannel: string,
   newPostText: string,
@@ -727,41 +753,47 @@ function checkIsDuplicatePost(
   thresholdPercent: number = 80,
   checkMedia: boolean = true,
   mediaItems?: { type: 'photo' | 'video'; url: string }[],
-  sourceMsgId?: number
+  sourceMsgId?: number,
+  connectionId?: string
 ): { isDuplicate: boolean; similarity: number; matchedMsg?: ForwardedMessageRecord; reason?: string } {
   if (!newPostText && !mediaUrl && (!mediaItems || mediaItems.length === 0) && !sourceMsgId) {
     return { isDuplicate: false, similarity: 0 };
   }
 
   const cleanTarget = targetChannel.trim().toLowerCase();
-  const targetMessages = messages.filter(
-    (m) => m.status === "success" && m.targetChannel && m.targetChannel.trim().toLowerCase() === cleanTarget
-  );
+  const targetMessages = messages.filter((m) => {
+    if (m.status !== "success") return false;
+    if (m.targetChannel) {
+      return m.targetChannel.trim().toLowerCase() === cleanTarget;
+    }
+    const parentConn = connections.find((c) => c.id === m.connectionId);
+    return parentConn && parentConn.targetChannel && parentConn.targetChannel.trim().toLowerCase() === cleanTarget;
+  });
 
   for (const prevMsg of targetMessages.slice(0, 300)) {
-    // 1. Direct Source Msg ID match in same target channel
-    if (sourceMsgId && prevMsg.sourceMsgId && prevMsg.sourceMsgId === sourceMsgId) {
+    // 1. Direct Source Msg ID match in same target channel ONLY if from same connection
+    if (sourceMsgId && prevMsg.sourceMsgId && connectionId && prevMsg.connectionId === connectionId && prevMsg.sourceMsgId === sourceMsgId) {
       return {
         isDuplicate: true,
         similarity: 100,
         matchedMsg: prevMsg,
-        reason: `پست با شماره شناسه #${sourceMsgId} قبلاً به کانال ${targetChannel} منتقل شده است.`,
+        reason: `پست با شماره شناسه #${sourceMsgId} قبلاً از همین اتصال به کانال ${targetChannel} منتقل شده است.`,
       };
     }
 
-    // 2. Media matching
+    // 2. Media matching across ALL source channels sending to this target channel
     if (checkMedia) {
       if (areMediaUrlsMatching(mediaUrl, prevMsg.mediaUrl, mediaItems, prevMsg.mediaItems)) {
         return {
           isDuplicate: true,
           similarity: 100,
           matchedMsg: prevMsg,
-          reason: "تطابق تصویر/ویدیوی فایل‌های رسانه‌ای در کانال مقصد",
+          reason: "تطابق فایل‌های رسانه‌ای (تصویر/ویدیو) در ناظر کانال مقصد",
         };
       }
     }
 
-    // 3. Text Similarity matching
+    // 3. Text Similarity matching across ALL source channels sending to this target channel
     if (newPostText && prevMsg.caption) {
       const sim = calculateTextSimilarity(newPostText, prevMsg.caption);
       if (sim >= thresholdPercent) {
@@ -769,7 +801,7 @@ function checkIsDuplicatePost(
           isDuplicate: true,
           similarity: sim,
           matchedMsg: prevMsg,
-          reason: `شباهت متنی ${sim}٪ (بالاتر از آستانه ${thresholdPercent}٪)`,
+          reason: `شباهت متنی ${sim}٪ با یکی از پست‌های موجود در کانال ${targetChannel}`,
         };
       }
     }
@@ -1665,67 +1697,82 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
 
   addLog(conn.id, "info", `${newPosts.length} پست جدید در کانال مبدأ شناسایی شد. بررسی فیلترها و شروع ارسال...`);
 
-  for (const post of newPosts) {
-    const alreadySent = messages.some((m) => m.connectionId === conn.id && m.sourceMsgId === post.msgId);
-    if (alreadySent) {
-      if (post.msgId > (conn.lastMessageId || 0)) {
-        conn.lastMessageId = post.msgId;
+  // Acquire target channel lock to process posts sequentially across all connections targeting this channel
+  await acquireTargetChannelLock(conn.targetChannel, async () => {
+    for (const post of newPosts) {
+      const alreadySent = messages.some((m) => m.connectionId === conn.id && m.sourceMsgId === post.msgId);
+      if (alreadySent) {
+        if (post.msgId > (conn.lastMessageId || 0)) {
+          conn.lastMessageId = post.msgId;
+        }
+        continue;
       }
-      continue;
-    }
 
-    // 1. Content Filter Check
-    const allowed = isPostAllowedByFilter(post, conn.settings?.contentFilter);
-    if (!allowed) {
-      addLog(
-        conn.id,
-        "info",
-        `پست #${post.msgId} به علت فیلتر نوع محتوا (${conn.settings?.contentFilter || 'همه'}) نادیده گرفته شد.`,
-        post.type,
-        post.msgId
-      );
-      conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
-      writeJsonFile(CONNECTIONS_FILE, connections);
-      continue;
-    }
+      // 1. Content Filter Check
+      const allowed = isPostAllowedByFilter(post, conn.settings?.contentFilter);
+      if (!allowed) {
+        addLog(
+          conn.id,
+          "info",
+          `پست #${post.msgId} به علت فیلتر نوع محتوا (${conn.settings?.contentFilter || 'همه'}) نادیده گرفته شد.`,
+          post.type,
+          post.msgId
+        );
+        conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+        writeJsonFile(CONNECTIONS_FILE, connections);
+        continue;
+      }
 
-    // 2. Text Transformation & AI Rewriting
-    const transformedText = await applyTextTransformations(post.text, conn.settings, conn.sourceChannel, conn.targetChannel);
+      // 2. Text Transformation & AI Rewriting
+      const transformedText = await applyTextTransformations(post.text, conn.settings, conn.sourceChannel, conn.targetChannel);
 
-    // 2b. Duplicate Detection & Prevention Check (Skip sending new duplicate posts, keep old posts untouched)
-    const preventDuplicates = conn.settings?.preventDuplicates ?? true;
-    const similarityThreshold = conn.settings?.duplicateSimilarityThreshold ?? 80;
-    const checkMedia = conn.settings?.checkMediaDuplicate ?? true;
-    const duplicateAction = conn.settings?.duplicateAction || 'skip';
+      // 2b. Global Target Channel Supervisor Duplicate Check
+      const preventDuplicates = conn.settings?.preventDuplicates ?? true;
+      const similarityThreshold = conn.settings?.duplicateSimilarityThreshold ?? 80;
+      const checkMedia = conn.settings?.checkMediaDuplicate ?? true;
+      const duplicateAction = conn.settings?.duplicateAction || 'skip';
 
-    if (preventDuplicates) {
-      const primaryMediaUrl = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
-      const dupCheck = checkIsDuplicatePost(
-        conn.targetChannel,
-        transformedText,
-        primaryMediaUrl,
-        similarityThreshold,
-        checkMedia,
-        post.mediaItems,
-        post.msgId
-      );
+      if (preventDuplicates) {
+        const primaryMediaUrl = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
+        const dupCheck = checkIsDuplicatePost(
+          conn.targetChannel,
+          transformedText,
+          primaryMediaUrl,
+          similarityThreshold,
+          checkMedia,
+          post.mediaItems,
+          post.msgId,
+          conn.id
+        );
 
-      if (dupCheck.isDuplicate) {
-        if (duplicateAction === 'delete_existing' && dupCheck.matchedMsg && dupCheck.matchedMsg.targetMsgId) {
-          const delRes = await deleteTelegramMessage(conn.botToken, conn.targetChannel, dupCheck.matchedMsg.targetMsgId);
-          if (delRes.ok) {
-            dupCheck.matchedMsg.status = 'failed';
-            addLog(
-              conn.id,
-              "info",
-              `پست تکراری قدیمی #${dupCheck.matchedMsg.sourceMsgId} (شناسه پیام: ${dupCheck.matchedMsg.targetMsgId}) از کانال حذف شد تا پست جدید #${post.msgId} جایگزین گردد.`
-            );
-            writeJsonFile(MESSAGES_FILE, messages);
+        if (dupCheck.isDuplicate) {
+          if (duplicateAction === 'delete_existing' && dupCheck.matchedMsg && dupCheck.matchedMsg.targetMsgId) {
+            const delRes = await deleteTelegramMessage(conn.botToken, conn.targetChannel, dupCheck.matchedMsg.targetMsgId);
+            if (delRes.ok) {
+              dupCheck.matchedMsg.status = 'failed';
+              addLog(
+                conn.id,
+                "info",
+                `پست تکراری قدیمی #${dupCheck.matchedMsg.sourceMsgId} (شناسه پیام: ${dupCheck.matchedMsg.targetMsgId}) از کانال حذف شد تا پست جدید #${post.msgId} جایگزین گردد.`
+              );
+              writeJsonFile(MESSAGES_FILE, messages);
+            } else {
+              addLog(
+                conn.id,
+                "warning",
+                `خطا در حذف پست تکراری قدیمی تلگرام (${delRes.error}). ارسال پست جدید متوقف شد.`,
+                post.type,
+                post.msgId
+              );
+              conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+              writeJsonFile(CONNECTIONS_FILE, connections);
+              continue;
+            }
           } else {
             addLog(
               conn.id,
               "warning",
-              `خطا در حذف پست تکراری قدیمی تلگرام (${delRes.error}). ارسال پست جدید متوقف شد.`,
+              `[ناظر کانال مقصد] پست جدید #${post.msgId} از کانال مبدأ ${conn.sourceChannel} به علت شباهت ${dupCheck.similarity}٪ با پست موجود در کانال ${conn.targetChannel} ارسال نشد. علت: ${dupCheck.reason}`,
               post.type,
               post.msgId
             );
@@ -1733,20 +1780,8 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
             writeJsonFile(CONNECTIONS_FILE, connections);
             continue;
           }
-        } else {
-          addLog(
-            conn.id,
-            "warning",
-            `پست جدید #${post.msgId} به علت شباهت ${dupCheck.similarity}٪ با پست موجود در کانال ${conn.targetChannel} ارسال نشد. علت: ${dupCheck.reason}`,
-            post.type,
-            post.msgId
-          );
-          conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
-          writeJsonFile(CONNECTIONS_FILE, connections);
-          continue;
         }
       }
-    }
 
     const filter = conn.settings?.contentFilter;
     const isTextOnlyFilter = filter === "text_only";
@@ -1903,6 +1938,7 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
       });
     }
   }
+});
 }
 
 // Background Sync Loop

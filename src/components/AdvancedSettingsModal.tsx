@@ -900,6 +900,19 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* Target Channel Supervisor Banner */}
+                <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0" />
+                  <div>
+                    <span className="font-bold block text-purple-300">
+                      ناظر یکپارچه کانال مقصد ({connection.targetChannel}):
+                    </span>
+                    <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                      ناظر سیستم تمام کانال‌های مبدأ متصل به <strong>{connection.targetChannel}</strong> را به‌صورت سراسری زیر نظر می‌گیرد. حتی اگر چند کانال مبدأ یک خبر یا پست یکسان را به صورت همزمان ارسال کنند، قفل ناظر کانال مقصد از ورود پست‌های همزمان یا تکراری به کانال شما جلوگیری خواهد کرد.
+                    </span>
+                  </div>
+                </div>
+
                 {/* Duplicate Action Behavior */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-200">
