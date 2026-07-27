@@ -131,6 +131,39 @@ export async function testAiApi(payload: {
   });
 }
 
+export async function fetchGlobalSupervisorConfig(): Promise<{ config: any; stats: any }> {
+  return safeJsonFetch('/api/global-supervisor/config');
+}
+
+export async function updateGlobalSupervisorConfig(config: any): Promise<{ config: any }> {
+  return safeJsonFetch('/api/global-supervisor/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+}
+
+export async function testGlobalSupervisorBot(payload: {
+  botToken: string;
+  targetChannel?: string;
+}): Promise<{ ok: boolean; botName?: string; username?: string; channelTitle?: string; isChannelAdmin?: boolean; message: string }> {
+  return safeJsonFetch('/api/global-supervisor/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function scanGlobalSupervisorChannels(payload: {
+  botToken?: string;
+}): Promise<{ ok: boolean; scannedCount: number; message: string }> {
+  return safeJsonFetch('/api/global-supervisor/scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function loginUser(dto: LoginDTO): Promise<{ user: User; token: string }> {
   return safeJsonFetch('/api/auth/login', {
     method: 'POST',

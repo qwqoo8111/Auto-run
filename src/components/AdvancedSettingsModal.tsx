@@ -150,31 +150,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [cleaningDuplicates, setCleaningDuplicates] = useState<boolean>(false);
   const [cleanDuplicatesResult, setCleanDuplicatesResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // Global Channel Supervisor State
-  const [enableGlobalSupervisor, setEnableGlobalSupervisor] = useState<boolean>(true);
-  const [globalHashAlgorithm, setGlobalHashAlgorithm] = useState<'fingerprint' | 'exact_hash' | 'fuzzy_token'>('fuzzy_token');
-  const [globalSimilarityThreshold, setGlobalSimilarityThreshold] = useState<number>(80);
-  const [cacheBufferHours, setCacheBufferHours] = useState<number>(24);
-  const [crossChannelScope, setCrossChannelScope] = useState<'all_channels' | 'same_target_channel'>('all_channels');
-  const [globalSupervisorStats, setGlobalSupervisorStats] = useState<{
-    totalBufferedFingerprints: number;
-    monitoredChannelsCount: number;
-    lastUpdated: string | null;
-    bufferStatus: string;
-  } | null>(null);
-
-  const fetchSupervisorStats = async () => {
-    try {
-      const res = await fetch('/api/global-supervisor/stats');
-      if (res.ok) {
-        const data = await res.json();
-        setGlobalSupervisorStats(data);
-      }
-    } catch (e) {
-      console.error('Failed to fetch supervisor stats', e);
-    }
-  };
-
   useEffect(() => {
     if (connection) {
       const s = connection.settings || {};
@@ -207,14 +182,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setDuplicateSimilarityThreshold(s.duplicateSimilarityThreshold ?? 80);
       setDuplicateAction(s.duplicateAction || 'skip');
       setCheckMediaDuplicate(s.checkMediaDuplicate !== undefined ? !!s.checkMediaDuplicate : true);
-
-      setEnableGlobalSupervisor(s.enableGlobalSupervisor !== undefined ? !!s.enableGlobalSupervisor : true);
-      setGlobalHashAlgorithm(s.globalHashAlgorithm || 'fuzzy_token');
-      setGlobalSimilarityThreshold(s.globalSimilarityThreshold ?? 80);
-      setCacheBufferHours(s.cacheBufferHours || 24);
-      setCrossChannelScope(s.crossChannelScope || 'all_channels');
-
-      fetchSupervisorStats();
 
       setEnableBale(!!s.enableBale || !!connection.enableBale);
       setBaleTargetChannel(s.baleTargetChannel || connection.baleTargetChannel || '');
@@ -432,11 +399,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         duplicateSimilarityThreshold,
         duplicateAction,
         checkMediaDuplicate,
-        enableGlobalSupervisor,
-        globalHashAlgorithm,
-        globalSimilarityThreshold,
-        cacheBufferHours,
-        crossChannelScope,
       };
       await updateConnectionSettings(connection.id, newSettings);
       setSavedSuccess(true);
@@ -960,30 +922,14 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setDuplicateAction('skip')}
-                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                        duplicateAction === 'skip'
-                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold shadow-md'
-                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
-                      }`}
+                      className="p-3.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-md text-right w-full"
                     >
-                      <span className="text-xs font-bold block">🚫 عدم ارسال پست جدید (پیش‌فرض)</span>
-                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
-                        پست جدید ارسال نمی‌شود و پست‌های قبلی کانال بدون تغییر حفظ می‌شوند.
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                        <span>🚫 جلوگیرى از انتشار و عدم ارسال پست جدید (پیش‌فرض هوشمند)</span>
                       </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDuplicateAction('delete_existing')}
-                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                        duplicateAction === 'delete_existing'
-                          ? 'bg-rose-500/20 border-rose-400 text-rose-300 font-bold shadow-md'
-                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
-                      }`}
-                    >
-                      <span className="text-xs font-bold block">🗑️ حذف پست قدیمی و جایگزینی با پست جدید</span>
-                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
-                        پست تکراری قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.
+                      <span className="text-[11px] text-slate-300 block mt-1 leading-relaxed">
+                        از آپلود پست جدید تکراری در لحظه جلوگیری می‌شود و تمام پست‌های قبلی کانال بدون هیچ‌گونه دستکاری یا حذفی کاملاً سالم باقی می‌مانند.
                       </span>
                     </button>
                   </div>
@@ -1035,182 +981,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       <span className="font-bold">{cleanDuplicatesResult.message}</span>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 3.5: Global Channel Supervisor (ناظر سراسری کانال - سرویس مرکزی) */}
-          <div className="p-4 rounded-xl neu-inset bg-purple-500/5 border border-purple-500/25 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-purple-500/20 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  <Cpu className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-purple-300">ناظر سراسری کانال (Global Channel Supervisor)</h4>
-                    <span className="text-[10px] bg-purple-500/20 text-purple-300 font-extrabold px-2 py-0.5 rounded-full border border-purple-500/30">
-                      Singleton Service
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    سرویس یکپارچه مرکزی برای هش‌گذاری متقاطع و جلوگیری از انتشار پست‌های تکراری در کانال مقصد
-                  </p>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer bg-purple-500/15 hover:bg-purple-500/25 px-3 py-1.5 rounded-xl border border-purple-500/35 transition-all">
-                <input
-                  type="checkbox"
-                  checked={enableGlobalSupervisor}
-                  onChange={(e) => setEnableGlobalSupervisor(e.target.checked)}
-                  className="w-4 h-4 accent-purple-400 rounded cursor-pointer"
-                />
-                <span className="text-xs font-bold text-purple-200">فعال‌سازی ناظر سراسری</span>
-              </label>
-            </div>
-
-            {enableGlobalSupervisor && (
-              <div className="space-y-4 animate-fadeIn pt-1">
-                {/* Hash Algorithm Selection */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
-                    <span>۱. الگوریتم هش و سنجش اثرانگشت محتوا:</span>
-                    <span className="text-[10px] text-purple-400 font-mono">Fingerprint Hash Engine</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
-                      {
-                        id: 'fuzzy_token',
-                        title: '🔍 اثرانگشت ترکیبی (Fuzzy)',
-                        desc: 'تشخیص هوشمند شباهت‌های متنی و فایل‌های رسانه‌ای بر اساس کلمات کلیدی',
-                      },
-                      {
-                        id: 'exact_hash',
-                        title: '⚡ هش دقیق (Exact MD5)',
-                        desc: 'مقایسه عینا کلید هش ریاضی بدون امکان کوچک‌ترین تفاوت در متن یا فایل',
-                      },
-                      {
-                        id: 'fingerprint',
-                        title: '🧩 اثرانگشت متنی (Token)',
-                        desc: 'استخراج کلمات منحصر به‌فرد و ایجاد کد اثرانگشت متنی متقاطع',
-                      },
-                    ].map((alg) => (
-                      <button
-                        type="button"
-                        key={alg.id}
-                        onClick={() => setGlobalHashAlgorithm(alg.id as any)}
-                        className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                          globalHashAlgorithm === alg.id
-                            ? 'bg-purple-500/25 border-purple-400 text-purple-200 font-bold shadow-lg'
-                            : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
-                        }`}
-                      >
-                        <span className="text-xs font-bold block">{alg.title}</span>
-                        <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed opacity-80">{alg.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Cross-Channel Scope */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200">
-                    ۲. حوزه نظارت و دامنه جلوگیری از تکرار (Scope):
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCrossChannelScope('all_channels')}
-                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                        crossChannelScope === 'all_channels'
-                          ? 'bg-purple-500/25 border-purple-400 text-purple-200 font-bold shadow-lg'
-                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
-                      }`}
-                    >
-                      <span className="text-xs font-bold block">🌐 نظارت سراسری بین تمام اتصالات کانال (Cross-Channel)</span>
-                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
-                        اگر پستی در هر کدام از اتصالات ربات ارسال شده باشد، از ارسال مجدد آن در تمام کانال‌های دیگر جلوگیری می‌شود.
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCrossChannelScope('same_target_channel')}
-                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                        crossChannelScope === 'same_target_channel'
-                          ? 'bg-indigo-500/25 border-indigo-400 text-indigo-200 font-bold shadow-lg'
-                          : 'bg-black/30 border-white/5 text-slate-400 hover:border-white/20'
-                      }`}
-                    >
-                      <span className="text-xs font-bold block">🎯 نظارت تک‌کاناله اختصاصی (Target Channel Only)</span>
-                      <span className="text-[10px] text-slate-400 block mt-1 leading-relaxed">
-                        فقط پست‌های ثبت‌شده مربوط به کانال مقصد همین اتصال ({connection.targetChannel}) ارزیابی می‌گردند.
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Memory Cache TTL (Buffer Age) */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
-                    <span>۳. مدت زمان ماندگاری در حافظه موقت (Buffer Cache TTL):</span>
-                    <span className="text-purple-300 font-bold text-xs dir-rtl bg-purple-500/10 px-2.5 py-0.5 rounded-lg border border-purple-500/20">
-                      {cacheBufferHours === 168 ? 'یک هفته (۷ روز)' : `${cacheBufferHours.toLocaleString('fa-IR')} ساعت`}
-                    </span>
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { hours: 24, label: '۲۴ ساعت', desc: '۱ روز - پیش‌فرض' },
-                      { hours: 48, label: '۴۸ ساعت', desc: '۲ روز ماندگاری' },
-                      { hours: 72, label: '۷۲ ساعت', desc: '۳ روز ماندگاری' },
-                      { hours: 168, label: '۱۶۸ ساعت', desc: '۷ روز (۱ هفته)' },
-                    ].map((item) => (
-                      <button
-                        type="button"
-                        key={item.hours}
-                        onClick={() => setCacheBufferHours(item.hours)}
-                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                          cacheBufferHours === item.hours
-                            ? 'bg-purple-500/30 border-purple-400 text-purple-200 font-extrabold shadow-md'
-                            : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
-                        }`}
-                      >
-                        <span className="text-xs font-extrabold block">{item.label}</span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">{item.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Live Singleton Cache Statistics */}
-                <div className="p-3.5 rounded-2xl bg-black/40 border border-purple-500/20 flex items-center justify-between flex-wrap gap-3 text-xs">
-                  <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-purple-400 animate-pulse shrink-0" />
-                    <div>
-                      <span className="font-bold text-purple-200 block">وضعیت حافظه زنده سرویس ناظر سراسری:</span>
-                      <span className="text-[11px] text-slate-400 block mt-0.5">
-                        اثرانگشت‌های ثبت‌شده در حافظه:{' '}
-                        <strong className="text-purple-300 font-mono">
-                          {globalSupervisorStats ? globalSupervisorStats.totalBufferedFingerprints.toLocaleString('fa-IR') : '—'}
-                        </strong>{' '}
-                        | کانال‌های تحت نظارت:{' '}
-                        <strong className="text-purple-300 font-mono">
-                          {globalSupervisorStats ? globalSupervisorStats.monitoredChannelsCount.toLocaleString('fa-IR') : '—'}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={fetchSupervisorStats}
-                    className="text-[11px] font-bold text-purple-300 hover:text-purple-100 bg-purple-500/20 hover:bg-purple-500/30 px-3 py-1.5 rounded-xl border border-purple-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>به‌روزرسانی آمار</span>
-                  </button>
                 </div>
               </div>
             )}

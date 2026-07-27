@@ -40,6 +40,14 @@ export interface AdvancedSettings {
   crossChannelScope?: 'all_channels' | 'same_target_channel';
 }
 
+export interface GlobalSupervisorConfig {
+  enabled: boolean;
+  botToken: string;
+  autoDelete: boolean;
+  scanDepth: number;
+  platform: 'telegram' | 'bale' | 'both';
+}
+
 export interface TelegramConnection {
   id: string;
   sourceChannel: string;

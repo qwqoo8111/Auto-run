@@ -24,6 +24,7 @@ const LOGS_FILE = path.join(DATA_DIR, "logs.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const PURCHASE_REQUESTS_FILE = path.join(DATA_DIR, "purchase_requests.json");
+const GLOBAL_SUPERVISOR_FILE = path.join(DATA_DIR, "global_supervisor.json");
 
 // Helper storage functions
 function readJsonFile<T>(filePath: string, defaultValue: T): T {
@@ -48,6 +49,13 @@ function writeJsonFile<T>(filePath: string, data: T): void {
 
 let users: User[] = readJsonFile(USERS_FILE, []);
 let purchaseRequests: any[] = readJsonFile(PURCHASE_REQUESTS_FILE, []);
+let globalSupervisorConfig = readJsonFile(GLOBAL_SUPERVISOR_FILE, {
+  enabled: true,
+  botToken: "",
+  autoDelete: false,
+  scanDepth: 50,
+  platform: "telegram",
+});
 
 const ADMIN_EMAIL = "amir.r.an37@gmail.com";
 let adminUser = users.find(
@@ -728,6 +736,7 @@ interface CachedMessageFingerprint {
   hash: string;
   textFingerprint: string;
   mediaHash?: string;
+  mediaHashes?: string[];
   targetChannel: string;
   sourceChannel: string;
   connectionId: string;
@@ -778,21 +787,38 @@ class GlobalChannelSupervisorService {
     id: string;
     caption: string;
     mediaUrl?: string;
+    mediaItems?: { type: string; url: string }[];
     targetChannel: string;
     sourceChannel: string;
     connectionId: string;
   }) {
-    if (!item.caption && !item.mediaUrl) return;
+    if (!item.caption && !item.mediaUrl && (!item.mediaItems || item.mediaItems.length === 0)) return;
 
     const exactHash = this.computeExactHash(item.caption, item.mediaUrl);
     const fingerprint = this.computeFingerprint(item.caption);
-    const mediaHash = extractMediaBasename(item.mediaUrl || "");
+    
+    const mediaHashesSet = new Set<string>();
+    if (item.mediaUrl) {
+      const base = extractMediaBasename(item.mediaUrl);
+      if (base) mediaHashesSet.add(base);
+    }
+    if (item.mediaItems && Array.isArray(item.mediaItems)) {
+      item.mediaItems.forEach(mi => {
+        if (mi?.url) {
+          const base = extractMediaBasename(mi.url);
+          if (base) mediaHashesSet.add(base);
+        }
+      });
+    }
+    const mediaHashes = Array.from(mediaHashesSet);
+    const primaryMediaHash = mediaHashes[0] || "";
 
     const record: CachedMessageFingerprint = {
       id: item.id,
       hash: exactHash,
       textFingerprint: fingerprint,
-      mediaHash,
+      mediaHash: primaryMediaHash,
+      mediaHashes,
       targetChannel: (item.targetChannel || "").trim().toLowerCase(),
       sourceChannel: item.sourceChannel || "",
       connectionId: item.connectionId,
@@ -811,7 +837,7 @@ class GlobalChannelSupervisorService {
   public checkDuplicate(params: {
     text: string;
     mediaUrl?: string;
-    mediaItems?: { type: 'photo' | 'video'; url: string }[];
+    mediaItems?: { type: string; url: string }[];
     targetChannel: string;
     connectionId: string;
     settings?: AdvancedSettings;
@@ -839,7 +865,22 @@ class GlobalChannelSupervisorService {
       return true;
     });
 
-    const newMediaBasename = extractMediaBasename(mediaUrl || (mediaItems && mediaItems[0]?.url) || "");
+    // Gather all incoming media basenames for photos, videos, and albums
+    const incomingMediaSet = new Set<string>();
+    if (mediaUrl) {
+      const b = extractMediaBasename(mediaUrl);
+      if (b) incomingMediaSet.add(b);
+    }
+    if (mediaItems && Array.isArray(mediaItems)) {
+      mediaItems.forEach(mi => {
+        if (mi?.url) {
+          const b = extractMediaBasename(mi.url);
+          if (b) incomingMediaSet.add(b);
+        }
+      });
+    }
+    const incomingMediaList = Array.from(incomingMediaSet);
+
     const currentExactHash = this.computeExactHash(text, mediaUrl);
 
     for (const cached of activeBuffer) {
@@ -855,14 +896,21 @@ class GlobalChannelSupervisorService {
         }
       }
 
-      // 2. Media Basename Cross-Check
-      if (newMediaBasename && cached.mediaHash && newMediaBasename === cached.mediaHash) {
-        return {
-          isDuplicate: true,
-          similarity: 100,
-          matchedFromChannel: cached.sourceChannel,
-          reason: `[هش رسانه] تصویر/ویدیوی این پست قبلاً از کانال مبدأ ${cached.sourceChannel} توسط ناظر سراسری ثبت شده است.`,
-        };
+      // 2. Media Basename Cross-Check for Photos, Videos & Albums
+      if (incomingMediaList.length > 0) {
+        const cachedHashes = cached.mediaHashes && cached.mediaHashes.length > 0 
+          ? cached.mediaHashes 
+          : (cached.mediaHash ? [cached.mediaHash] : []);
+
+        const mediaMatchFound = incomingMediaList.some(inc => cachedHashes.includes(inc));
+        if (mediaMatchFound) {
+          return {
+            isDuplicate: true,
+            similarity: 100,
+            matchedFromChannel: cached.sourceChannel,
+            reason: `[هش رسانه (تصویر/ویدیو)] تصویر یا ویدیوی این پست قبلاً از کانال مبدأ ${cached.sourceChannel} توسط ناظر سراسری ثبت شده است.`,
+          };
+        }
       }
 
       // 3. Text Similarity Fingerprint Match
@@ -909,6 +957,7 @@ try {
       id: msg.id,
       caption: msg.caption || '',
       mediaUrl: msg.mediaUrl || (msg.mediaItems && msg.mediaItems[0]?.url) || '',
+      mediaItems: msg.mediaItems,
       targetChannel: msg.targetChannel || (conn ? conn.targetChannel : ''),
       sourceChannel: conn ? conn.sourceChannel : '',
       connectionId: msg.connectionId,
@@ -1944,44 +1993,20 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         );
 
         if (dupCheck.isDuplicate) {
-          if (duplicateAction === 'delete_existing' && dupCheck.matchedMsg && dupCheck.matchedMsg.targetMsgId) {
-            const delRes = await deleteTelegramMessage(conn.botToken, conn.targetChannel, dupCheck.matchedMsg.targetMsgId);
-            if (delRes.ok) {
-              dupCheck.matchedMsg.status = 'failed';
-              addLog(
-                conn.id,
-                "info",
-                `پست تکراری قدیمی #${dupCheck.matchedMsg.sourceMsgId} (شناسه پیام: ${dupCheck.matchedMsg.targetMsgId}) از کانال حذف شد تا پست جدید #${post.msgId} جایگزین گردد.`
-              );
-              writeJsonFile(MESSAGES_FILE, messages);
-            } else {
-              addLog(
-                conn.id,
-                "warning",
-                `خطا در حذف پست تکراری قدیمی تلگرام (${delRes.error}). ارسال پست جدید متوقف شد.`,
-                post.type,
-                post.msgId
-              );
-              conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
-              writeJsonFile(CONNECTIONS_FILE, connections);
-              continue;
-            }
-          } else {
-            addLog(
-              conn.id,
-              "warning",
-              `[ناظر کانال مقصد] پست جدید #${post.msgId} از کانال مبدأ ${conn.sourceChannel} به علت شباهت ${dupCheck.similarity}٪ با پست موجود در کانال ${conn.targetChannel} ارسال نشد. علت: ${dupCheck.reason}`,
-              post.type,
-              post.msgId
-            );
-            conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
-            writeJsonFile(CONNECTIONS_FILE, connections);
-            continue;
-          }
+          addLog(
+            conn.id,
+            "warning",
+            `[ربات ناظر اختصاصی کانال] از انتشار پست جدید #${post.msgId} (شباهت ${dupCheck.similarity}٪) جلوگیری شد. پست قبلی در کانال ${conn.targetChannel} بدون تغییر باقی ماند. علت: ${dupCheck.reason}`,
+            post.type,
+            post.msgId
+          );
+          conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+          writeJsonFile(CONNECTIONS_FILE, connections);
+          continue;
         }
       }
 
-      // 2c. Singleton Global Channel Supervisor Check
+      // 2c. Dedicated / Singleton Global Channel Supervisor Check
       const primaryMediaForGlobal = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
       const globalDupCheck = globalSupervisor.checkDuplicate({
         text: transformedText,
@@ -1996,7 +2021,7 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         addLog(
           conn.id,
           "warning",
-          `[ناظر سراسری کانال - Singleton] از انتشار پیام #${post.msgId} (از کانال مبدأ ${conn.sourceChannel}) جلوگیری شد. علت: ${globalDupCheck.reason}`,
+          `[ربات ناظر اختصاصی کانال] از انتشار پیام #${post.msgId} (از کانال مبدأ ${conn.sourceChannel}) جلوگیری شد. علت: ${globalDupCheck.reason}`,
           post.type,
           post.msgId
         );
@@ -2355,13 +2380,213 @@ app.put("/api/connections/:id/settings", (req, res) => {
   };
 
   writeJsonFile(CONNECTIONS_FILE, connections);
-  addLog(conn.id, "info", "تنظیمات پیشرفته، ناظر سراسری و سیستم ضدتکرار با موفقیت به‌روزرسانی شد.");
+  addLog(conn.id, "info", "تنظیمات پیشرفته، ناظر سراسری و ربات اختصاصی ناظر کانال با موفقیت به‌روزرسانی شد.");
 
   res.json(conn);
 });
 
 app.get("/api/global-supervisor/stats", (req, res) => {
   res.json(globalSupervisor.getStats());
+});
+
+app.get("/api/global-supervisor/config", (req, res) => {
+  res.json({
+    config: globalSupervisorConfig,
+    stats: globalSupervisor.getStats(),
+  });
+});
+
+app.post("/api/global-supervisor/config", (req, res) => {
+  const { enabled, botToken, autoDelete, scanDepth, platform } = req.body || {};
+  globalSupervisorConfig = {
+    enabled: enabled !== undefined ? !!enabled : true,
+    botToken: (botToken || "").trim(),
+    autoDelete: !!autoDelete,
+    scanDepth: scanDepth || 50,
+    platform: platform || "telegram",
+  };
+  writeJsonFile(GLOBAL_SUPERVISOR_FILE, globalSupervisorConfig);
+  res.json({ config: globalSupervisorConfig });
+});
+
+app.post("/api/global-supervisor/test", async (req, res) => {
+  try {
+    const { botToken, supervisorBotToken, targetChannel } = req.body || {};
+    const tokenToUse = (botToken || supervisorBotToken || globalSupervisorConfig.botToken || "").trim();
+
+    if (!tokenToUse) {
+      const activeConnWithToken = connections.find(c => c.botToken);
+      if (activeConnWithToken) {
+        return res.json({
+          ok: true,
+          message: "توکن ناظر اختصاصی وارد نشده است؛ سیستم به طور خودکار از توکن ربات اتصالات فعال استفاده می‌کند.",
+        });
+      }
+      return res.status(400).json({ ok: false, message: "لطفاً توکن ربات ناظر یا یک اتصال فعال با توکن معتبر ثبت نمایید." });
+    }
+
+    const meRes = await fetch(`https://api.telegram.org/bot${tokenToUse}/getMe`);
+    const meData: any = await meRes.json();
+    if (!meRes.ok || !meData.ok) {
+      return res.status(400).json({ ok: false, message: `توکن ربات ناظر نامعتبر است: ${meData.description || 'خطا در اتصال'}` });
+    }
+
+    const botInfo = meData.result;
+    let isChannelAdmin = false;
+    let channelTitle = "";
+
+    if (targetChannel && targetChannel.trim()) {
+      let cleanChannel = targetChannel.trim();
+      if (!cleanChannel.startsWith("@") && !cleanChannel.startsWith("-100")) {
+        cleanChannel = "@" + cleanChannel;
+      }
+
+      const chatRes = await fetch(`https://api.telegram.org/bot${tokenToUse}/getChat?chat_id=${encodeURIComponent(cleanChannel)}`);
+      const chatData: any = await chatRes.json();
+
+      if (chatRes.ok && chatData.ok) {
+        channelTitle = chatData.result.title || cleanChannel;
+        const memberRes = await fetch(`https://api.telegram.org/bot${tokenToUse}/getChatMember?chat_id=${encodeURIComponent(cleanChannel)}&user_id=${botInfo.id}`);
+        const memberData: any = await memberRes.json();
+        if (memberRes.ok && memberData.ok) {
+          const status = memberData.result.status;
+          if (status === 'administrator' || status === 'creator') {
+            isChannelAdmin = true;
+          }
+        }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      botName: botInfo.first_name,
+      username: botInfo.username,
+      channelTitle,
+      isChannelAdmin,
+      message: isChannelAdmin 
+        ? `ربات ناظر @${botInfo.username} با موفقیت تایید شد و دسترسی ادمین به کانال ${channelTitle} دارد.`
+        : `ربات ناظر @${botInfo.username} با موفقیت تایید و آماده به کار گردید.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, message: `خطا در تست ربات ناظر: ${err.message}` });
+  }
+});
+
+app.post("/api/global-supervisor/scan", async (req, res) => {
+  try {
+    let registeredCount = 0;
+    messages.filter(m => m.status === 'success').forEach(msg => {
+      const conn = connections.find(c => c.id === msg.connectionId);
+      globalSupervisor.registerMessage({
+        id: msg.id,
+        caption: msg.caption || '',
+        mediaUrl: msg.mediaUrl || (msg.mediaItems && msg.mediaItems[0]?.url) || '',
+        mediaItems: msg.mediaItems,
+        targetChannel: msg.targetChannel || (conn ? conn.targetChannel : ''),
+        sourceChannel: conn ? conn.sourceChannel : '',
+        connectionId: msg.connectionId,
+      });
+      registeredCount++;
+    });
+
+    return res.json({
+      ok: true,
+      scannedCount: registeredCount,
+      message: `اسکن هوشمند با موفقیت انجام شد! تعداد ${registeredCount.toLocaleString('fa-IR')} اثرانگشت در حافظه ناظر سراسری ثبت گردید.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, message: `خطا در اسکن کانال‌ها توسط ناظر سراسری: ${err.message}` });
+  }
+});
+
+app.post("/api/supervisor/test", async (req, res) => {
+  try {
+    const { supervisorBotToken, targetChannel } = req.body;
+    if (!supervisorBotToken) {
+      return res.status(400).json({ error: "لطفاً توکن ربات ناظر را وارد کنید." });
+    }
+    if (!targetChannel) {
+      return res.status(400).json({ error: "لطفاً آیدی کانال مقصد تحت نظارت را وارد کنید." });
+    }
+
+    const cleanToken = supervisorBotToken.trim();
+    const meRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+    const meData: any = await meRes.json();
+    if (!meRes.ok || !meData.ok) {
+      return res.status(400).json({ error: `توکن ربات ناظر نامعتبر است: ${meData.description || 'خطا در اتصال'}` });
+    }
+
+    const botInfo = meData.result;
+
+    let cleanChannel = targetChannel.trim();
+    if (!cleanChannel.startsWith("@") && !cleanChannel.startsWith("-100")) {
+      cleanChannel = "@" + cleanChannel;
+    }
+
+    const chatRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getChat?chat_id=${encodeURIComponent(cleanChannel)}`);
+    const chatData: any = await chatRes.json();
+
+    let isChannelAdmin = false;
+    let channelTitle = cleanChannel;
+
+    if (chatRes.ok && chatData.ok) {
+      channelTitle = chatData.result.title || cleanChannel;
+      const memberRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getChatMember?chat_id=${encodeURIComponent(cleanChannel)}&user_id=${botInfo.id}`);
+      const memberData: any = await memberRes.json();
+      if (memberRes.ok && memberData.ok) {
+        const status = memberData.result.status;
+        if (status === 'administrator' || status === 'creator') {
+          isChannelAdmin = true;
+        }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      botName: botInfo.first_name,
+      username: botInfo.username,
+      channelTitle,
+      isChannelAdmin,
+      message: isChannelAdmin 
+        ? `ربات ناظر @${botInfo.username} با موفقیت به کانال ${channelTitle} متصل گردید و دسترسی کامل ناظر/مدیریت دارد!`
+        : `ربات ناظر @${botInfo.username} فعال است اما هنوز دسترسی ادمین در کانال ${channelTitle} ندارد. لطفاً ربات را ادمین کانال فرمایید.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در تست ربات ناظر: ${err.message}` });
+  }
+});
+
+app.post("/api/supervisor/scan-channel", async (req, res) => {
+  try {
+    const { supervisorBotToken, targetChannel, connectionId } = req.body;
+    if (!supervisorBotToken || !targetChannel) {
+      return res.status(400).json({ error: "اطلاعات توکن ربات ناظر و کانال مقصد ناقص است." });
+    }
+
+    const conn = connections.find(c => c.id === connectionId);
+    const connMsgs = messages.filter(m => m.targetChannel?.toLowerCase() === targetChannel.trim().toLowerCase() || (conn && m.connectionId === conn.id));
+
+    // Register all existing target channel messages into supervisor cache
+    connMsgs.forEach(m => {
+      globalSupervisor.registerMessage({
+        id: m.id,
+        caption: m.caption || '',
+        mediaUrl: m.mediaUrl || (m.mediaItems && m.mediaItems[0]?.url) || '',
+        mediaItems: m.mediaItems,
+        targetChannel,
+        sourceChannel: conn ? conn.sourceChannel : '',
+        connectionId: connectionId || m.connectionId,
+      });
+    });
+
+    return res.json({
+      ok: true,
+      scannedCount: connMsgs.length,
+      message: `ربات ناظر با موفقیت ${connMsgs.length.toLocaleString('fa-IR')} پست ثبت‌شده در کانال ${targetChannel} را بررسی و اثرانگشت آنها را در دیتابیس نظارتی ثبت کرد.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در اسکن کانال مقصد توسط ربات ناظر: ${err.message}` });
+  }
 });
 
 app.post("/api/test-bale", async (req, res) => {

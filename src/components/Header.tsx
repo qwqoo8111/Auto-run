@@ -10,6 +10,7 @@ interface HeaderProps {
   onLogout: () => void;
   onOpenAdminPanel?: () => void;
   onOpenSubscriptions?: () => void;
+  onOpenGlobalSupervisor?: () => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
 }
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenAdminPanel,
   onOpenSubscriptions,
+  onOpenGlobalSupervisor,
   theme = 'dark',
   onToggleTheme,
 }) => {
@@ -68,6 +70,18 @@ export const Header: React.FC<HeaderProps> = ({
               {totalTransferred.toLocaleString('fa-IR')}
             </span>
           </div>
+
+          {/* Global Supervisor Bot Button */}
+          {onOpenGlobalSupervisor && (
+            <button
+              onClick={onOpenGlobalSupervisor}
+              className="neu-button px-3.5 py-2 text-xs font-black text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 hover:bg-cyan-500/25 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-cyan-500/10 cursor-pointer"
+              title="تنظیمات ربات ناظر سراسری کانال‌ها"
+            >
+              <Bot className="w-4 h-4 text-cyan-400" />
+              <span>ربات ناظر</span>
+            </button>
+          )}
 
           {/* Subscriptions Panel Button */}
           {onOpenSubscriptions && (
