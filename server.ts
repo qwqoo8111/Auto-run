@@ -1926,14 +1926,14 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
 
   let lastId = conn.lastMessageId;
 
-  if (lastId === null) {
+  if (lastId === null || lastId === undefined || lastId === 0) {
     const maxPostId = Math.max(...posts.map((p) => p.msgId));
-    conn.lastMessageId = maxPostId - 1;
+    conn.lastMessageId = maxPostId;
     conn.status = "active";
     conn.lastError = null;
     writeJsonFile(CONNECTIONS_FILE, connections);
-    addLog(conn.id, "info", `شناسه پیام اولیه تنظیم شد: #${maxPostId - 1}. در انتظار انتشار پست جدید...`);
-    lastId = maxPostId - 1;
+    addLog(conn.id, "info", `شناسه پیام اولیه روی آخرین پست (#${maxPostId}) تنظیم شد. در انتظار انتشار پست جدید...`);
+    return;
   }
 
   const newPosts = posts.filter((p) => p.msgId > (lastId || 0));
@@ -3607,16 +3607,25 @@ app.get("/api/admin/backup/export", (req, res) => {
     }
 
     const currentUsers = readJsonFile(USERS_FILE, users);
-    const currentConnections = readJsonFile(CONNECTIONS_FILE, connections);
+    const currentConnections: TelegramConnection[] = readJsonFile(CONNECTIONS_FILE, connections);
     const currentRequests = readJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests);
+
+    // Clean connections stats and lastMessageId in export so restoring won't re-send old messages
+    const cleanedConnections = currentConnections.map((conn) => ({
+      ...conn,
+      transferredCount: 0,
+      transferredToday: 0,
+      lastMessageId: null,
+      lastMessageTime: null,
+    }));
 
     const backupData = {
       version: "1.1.0",
       exportedAt: new Date().toISOString(),
       exportedBy: authUser.username,
-      note: "بکاپ اختصاصی اطلاعات اعضا (یوزرنیم، پسورد، ایمیل) و کانال‌های متصل اعضا (بدون پیام‌های منتقل‌شده)",
+      note: "بکاپ اختصاصی اطلاعات اعضا (یوزرنیم، پسورد، ایمیل) و کانال‌های متصل اعضا (بدون آمار و پیام‌های قدیمی)",
       users: currentUsers,
-      connections: currentConnections,
+      connections: cleanedConnections,
       purchaseRequests: currentRequests,
       messages: [],
       logs: [],
@@ -3680,23 +3689,25 @@ app.post("/api/admin/backup/import", (req, res) => {
       }
     }
 
+    // Reset stats and baseline ID on all imported connections so old posts won't be re-sent
+    importedConnections.forEach((conn: any) => {
+      conn.transferredCount = 0;
+      conn.transferredToday = 0;
+      conn.lastMessageId = null;
+      conn.lastMessageTime = null;
+    });
+
     users = importedUsers;
     connections = importedConnections;
     purchaseRequests = importedRequests;
+    messages = [];
+    logs = [];
 
     writeJsonFile(USERS_FILE, users);
     writeJsonFile(CONNECTIONS_FILE, connections);
     writeJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests);
-
-    // If backup JSON happens to include messages/logs (e.g. legacy backup), restore them if provided
-    if (Array.isArray(backupData.messages) && backupData.messages.length > 0) {
-      messages = backupData.messages;
-      writeJsonFile(MESSAGES_FILE, messages);
-    }
-    if (Array.isArray(backupData.logs) && backupData.logs.length > 0) {
-      logs = backupData.logs;
-      writeJsonFile(LOGS_FILE, logs);
-    }
+    writeJsonFile(MESSAGES_FILE, messages);
+    writeJsonFile(LOGS_FILE, logs);
 
     // Re-trigger active connection synchronization
     connections.forEach((conn) => {

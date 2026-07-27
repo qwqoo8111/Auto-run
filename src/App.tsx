@@ -77,31 +77,23 @@ export default function App() {
       const user = await fetchCurrentUser(savedToken);
       if (user && user.id) {
         setCurrentUser(user);
-      } else {
-        // Fallback to default admin account
-        const adminUser = await fetchCurrentUser('usr_token_admin_secret_key_137819');
-        if (adminUser && adminUser.id) {
-          setCurrentUser(adminUser);
-          localStorage.setItem('autorun_auth_token', 'usr_token_admin_secret_key_137819');
-        } else {
-          setCurrentUser(null);
-          localStorage.removeItem('autorun_auth_token');
-        }
+        return;
       }
-    } catch (err) {
-      // Try fallback to default admin token
-      try {
-        const adminUser = await fetchCurrentUser('usr_token_admin_secret_key_137819');
-        if (adminUser && adminUser.id) {
-          setCurrentUser(adminUser);
-          localStorage.setItem('autorun_auth_token', 'usr_token_admin_secret_key_137819');
-          return;
-        }
-      } catch (_) {}
-      console.warn('User session check failed, falling back:', err);
-      setCurrentUser(null);
-      localStorage.removeItem('autorun_auth_token');
+    } catch (_) {
+      // Saved token was invalid or expired - fallback to default admin account
     }
+
+    try {
+      const adminUser = await fetchCurrentUser('usr_token_admin_secret_key_137819');
+      if (adminUser && adminUser.id) {
+        setCurrentUser(adminUser);
+        localStorage.setItem('autorun_auth_token', 'usr_token_admin_secret_key_137819');
+        return;
+      }
+    } catch (_) {}
+
+    setCurrentUser(null);
+    localStorage.removeItem('autorun_auth_token');
   };
 
   const loadData = async () => {
@@ -110,16 +102,20 @@ export default function App() {
       setConnections(data.connections || []);
       setStats(data.stats || { totalConnections: 0, activeConnections: 0, totalTransferred: 0, lastActivity: null });
     } catch (err: any) {
-      console.error('Error fetching connections:', err);
       if (err?.message?.includes('403') || err?.message?.includes('401') || err?.message?.includes('منقضی')) {
         await checkUserSession();
+      } else {
+        console.error('Error fetching connections:', err);
       }
     }
   };
 
   useEffect(() => {
-    checkUserSession();
-    loadData();
+    const init = async () => {
+      await checkUserSession();
+      await loadData();
+    };
+    init();
   }, []);
 
   useEffect(() => {
