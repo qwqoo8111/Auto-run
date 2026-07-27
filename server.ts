@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import * as cheerio from "cheerio";
 import { GoogleGenAI } from "@google/genai";
@@ -348,12 +349,13 @@ function cleanChannelName(raw: string): string {
   return cleaned.replace(/\/.*$/, "");
 }
 
-function normalizeTargetChannel(raw: string): string {
-  let cleaned = raw.trim();
+function normalizeTargetChannel(raw?: string): string {
+  if (!raw) return "";
+  let cleaned = raw.trim().toLowerCase();
   if (cleaned.startsWith("-100") || cleaned.match(/^-\d+$/)) {
     return cleaned; // Chat ID
   }
-  cleaned = cleaned.replace(/^https?:\/\/t\.me\//i, "");
+  cleaned = cleaned.replace(/^https?:\/\/(s\/)?t\.me\//i, "");
   cleaned = cleaned.replace(/^@/, "");
   return `@${cleaned}`;
 }
@@ -681,16 +683,108 @@ function normalizeMediaUrl(url?: string): string {
 function extractMediaBasename(url?: string): string {
   if (!url) return "";
   const clean = normalizeMediaUrl(url);
-  const name = clean.split("/").pop() || "";
-  return name.length > 5 ? name : clean;
+  let name = clean.split("/").pop() || "";
+  // Strip Telegram resolution / size suffixes like _s, _o, _x, _b, _m, _y, _z, _a, _c, _d, _k, _thumb, _poster, _preview
+  name = name.replace(/_([soxbmyszacdk123]|thumb|poster|preview)(\.[a-z0-9]+)?$/i, "$2");
+  name = name.split(".")[0];
+  return name.length > 3 ? name : clean;
+}
+
+const mediaContentHashCache = new Map<string, string>();
+
+async function computeMediaContentHash(rawUrl?: string): Promise<string> {
+  if (!rawUrl) return "";
+  const cleanUrl = cleanMediaUrl(rawUrl) || rawUrl.trim();
+  if (!cleanUrl) return "";
+
+  if (mediaContentHashCache.has(cleanUrl)) {
+    return mediaContentHashCache.get(cleanUrl)!;
+  }
+
+  const fallbackBasename = extractMediaBasename(cleanUrl);
+
+  try {
+    if (cleanUrl.startsWith("data:")) {
+      const base64Data = cleanUrl.split(",")[1];
+      if (base64Data) {
+        const buf = Buffer.from(base64Data, "base64");
+        const hash = "chash_" + crypto.createHash("md5").update(buf).digest("hex");
+        mediaContentHashCache.set(cleanUrl, hash);
+        return hash;
+      }
+    }
+
+    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(cleanUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const arrayBuf = await res.arrayBuffer();
+        const buf = Buffer.from(arrayBuf);
+        if (buf.length > 0) {
+          const hash = "chash_" + crypto.createHash("md5").update(buf).digest("hex");
+          mediaContentHashCache.set(cleanUrl, hash);
+          return hash;
+        }
+      }
+    }
+  } catch (err) {
+    // Fallback to basename
+  }
+
+  if (fallbackBasename) {
+    mediaContentHashCache.set(cleanUrl, fallbackBasename);
+    return fallbackBasename;
+  }
+  return cleanUrl;
+}
+
+async function computeAllMediaHashes(
+  primaryUrl?: string,
+  mediaItems?: { type: string; url: string }[]
+): Promise<string[]> {
+  const urlsSet = new Set<string>();
+  if (primaryUrl) urlsSet.add(primaryUrl);
+  if (mediaItems && Array.isArray(mediaItems)) {
+    mediaItems.forEach((item) => {
+      if (item?.url) urlsSet.add(item.url);
+    });
+  }
+
+  const urls = Array.from(urlsSet);
+  if (urls.length === 0) return [];
+
+  const hashes = await Promise.all(urls.map((u) => computeMediaContentHash(u)));
+  const resultSet = new Set<string>();
+  hashes.forEach((h) => {
+    if (h) resultSet.add(h);
+  });
+  return Array.from(resultSet);
 }
 
 function areMediaUrlsMatching(
   url1?: string,
   url2?: string,
   items1?: { type: string; url: string }[],
-  items2?: { type: string; url: string }[]
+  items2?: { type: string; url: string }[],
+  hashes1?: string[],
+  hashes2?: string[]
 ): boolean {
+  if (hashes1 && hashes2 && hashes1.length > 0 && hashes2.length > 0) {
+    for (const h1 of hashes1) {
+      if (h1 && hashes2.includes(h1)) {
+        return true;
+      }
+    }
+  }
+
   const list1: string[] = [];
   if (url1) list1.push(url1);
   if (items1 && Array.isArray(items1)) {
@@ -737,6 +831,7 @@ interface CachedMessageFingerprint {
   textFingerprint: string;
   mediaHash?: string;
   mediaHashes?: string[];
+  mediaContentHashes?: string[];
   targetChannel: string;
   sourceChannel: string;
   connectionId: string;
@@ -788,11 +883,12 @@ class GlobalChannelSupervisorService {
     caption: string;
     mediaUrl?: string;
     mediaItems?: { type: string; url: string }[];
+    mediaContentHashes?: string[];
     targetChannel: string;
     sourceChannel: string;
     connectionId: string;
   }) {
-    if (!item.caption && !item.mediaUrl && (!item.mediaItems || item.mediaItems.length === 0)) return;
+    if (!item.caption && !item.mediaUrl && (!item.mediaItems || item.mediaItems.length === 0) && (!item.mediaContentHashes || item.mediaContentHashes.length === 0)) return;
 
     const exactHash = this.computeExactHash(item.caption, item.mediaUrl);
     const fingerprint = this.computeFingerprint(item.caption);
@@ -810,6 +906,11 @@ class GlobalChannelSupervisorService {
         }
       });
     }
+    if (item.mediaContentHashes && Array.isArray(item.mediaContentHashes)) {
+      item.mediaContentHashes.forEach(h => {
+        if (h) mediaHashesSet.add(h);
+      });
+    }
     const mediaHashes = Array.from(mediaHashesSet);
     const primaryMediaHash = mediaHashes[0] || "";
 
@@ -819,7 +920,8 @@ class GlobalChannelSupervisorService {
       textFingerprint: fingerprint,
       mediaHash: primaryMediaHash,
       mediaHashes,
-      targetChannel: (item.targetChannel || "").trim().toLowerCase(),
+      mediaContentHashes: item.mediaContentHashes || [],
+      targetChannel: normalizeTargetChannel(item.targetChannel),
       sourceChannel: item.sourceChannel || "",
       connectionId: item.connectionId,
       timestamp: Date.now(),
@@ -838,32 +940,51 @@ class GlobalChannelSupervisorService {
     text: string;
     mediaUrl?: string;
     mediaItems?: { type: string; url: string }[];
+    mediaContentHashes?: string[];
     targetChannel: string;
     connectionId: string;
     settings?: AdvancedSettings;
   }): { isDuplicate: boolean; similarity: number; reason?: string; matchedFromChannel?: string } {
-    const { text, mediaUrl, mediaItems, targetChannel, settings } = params;
+    const { text, mediaUrl, mediaItems, mediaContentHashes, targetChannel, settings } = params;
 
-    if (!settings?.enableGlobalSupervisor) {
+    const enableGlobal = settings?.enableGlobalSupervisor ?? true;
+    if (!enableGlobal) {
       return { isDuplicate: false, similarity: 0 };
     }
 
-    const algorithm = settings.globalHashAlgorithm || 'fuzzy_token';
-    const threshold = settings.globalSimilarityThreshold ?? 80;
-    const scope = settings.crossChannelScope || 'all_channels';
-    const cacheHours = settings.cacheBufferHours || 24;
+    const algorithm = settings?.globalHashAlgorithm || 'fuzzy_token';
+    const threshold = settings?.globalSimilarityThreshold ?? 75;
+    const scope = settings?.crossChannelScope || 'all_channels';
+    const cacheHours = settings?.cacheBufferHours || 24;
 
     const now = Date.now();
     const maxAgeMs = cacheHours * 60 * 60 * 1000;
-    const cleanTarget = (targetChannel || "").trim().toLowerCase();
+    const cleanTarget = normalizeTargetChannel(targetChannel);
 
     const activeBuffer = this.cacheBuffer.filter((item) => {
       if (now - item.timestamp > maxAgeMs) return false;
-      if (scope === 'same_target_channel' && item.targetChannel !== cleanTarget) {
+      if (scope === 'same_target_channel' && normalizeTargetChannel(item.targetChannel) !== cleanTarget) {
         return false;
       }
       return true;
     });
+
+    // 0. Pre-send Binary Media Content Hash Check
+    if (mediaContentHashes && mediaContentHashes.length > 0) {
+      for (const cached of activeBuffer) {
+        const cachedContentHashes = cached.mediaContentHashes || [];
+        const cachedMediaHashes = cached.mediaHashes || [];
+        const contentMatch = mediaContentHashes.some(inc => cachedContentHashes.includes(inc) || cachedMediaHashes.includes(inc));
+        if (contentMatch) {
+          return {
+            isDuplicate: true,
+            similarity: 100,
+            matchedFromChannel: cached.sourceChannel,
+            reason: `[هش محتوای فایل قبل از ارسال] هش فایل دریافت شده قبل از آپلود/ارسال با یکی از پست‌های ثبت‌شده قبلی از کانال ${cached.sourceChannel} مطابقت دقیق دارد.`,
+          };
+        }
+      }
+    }
 
     // Gather all incoming media basenames for photos, videos, and albums
     const incomingMediaSet = new Set<string>();
@@ -958,6 +1079,7 @@ try {
       caption: msg.caption || '',
       mediaUrl: msg.mediaUrl || (msg.mediaItems && msg.mediaItems[0]?.url) || '',
       mediaItems: msg.mediaItems,
+      mediaContentHashes: msg.mediaContentHashes,
       targetChannel: msg.targetChannel || (conn ? conn.targetChannel : ''),
       sourceChannel: conn ? conn.sourceChannel : '',
       connectionId: msg.connectionId,
@@ -1001,20 +1123,23 @@ function checkIsDuplicatePost(
   checkMedia: boolean = true,
   mediaItems?: { type: 'photo' | 'video'; url: string }[],
   sourceMsgId?: number,
-  connectionId?: string
+  connectionId?: string,
+  rawPostText?: string,
+  incomingMediaHashes?: string[]
 ): { isDuplicate: boolean; similarity: number; matchedMsg?: ForwardedMessageRecord; reason?: string } {
-  if (!newPostText && !mediaUrl && (!mediaItems || mediaItems.length === 0) && !sourceMsgId) {
+  if (!newPostText && !rawPostText && !mediaUrl && (!mediaItems || mediaItems.length === 0) && !sourceMsgId) {
     return { isDuplicate: false, similarity: 0 };
   }
 
-  const cleanTarget = targetChannel.trim().toLowerCase();
+  const cleanTarget = normalizeTargetChannel(targetChannel);
   const targetMessages = messages.filter((m) => {
     if (m.status !== "success") return false;
-    if (m.targetChannel) {
-      return m.targetChannel.trim().toLowerCase() === cleanTarget;
+    const mTarget = normalizeTargetChannel(m.targetChannel);
+    if (mTarget) {
+      return mTarget === cleanTarget;
     }
     const parentConn = connections.find((c) => c.id === m.connectionId);
-    return parentConn && parentConn.targetChannel && parentConn.targetChannel.trim().toLowerCase() === cleanTarget;
+    return parentConn && normalizeTargetChannel(parentConn.targetChannel) === cleanTarget;
   });
 
   for (const prevMsg of targetMessages.slice(0, 300)) {
@@ -1028,9 +1153,24 @@ function checkIsDuplicatePost(
       };
     }
 
-    // 2. Media matching across ALL source channels sending to this target channel
+    // 2. Media Content Hash Check before send
+    if (checkMedia && incomingMediaHashes && incomingMediaHashes.length > 0) {
+      if (prevMsg.mediaContentHashes && prevMsg.mediaContentHashes.length > 0) {
+        const hasHashMatch = incomingMediaHashes.some(h => prevMsg.mediaContentHashes!.includes(h));
+        if (hasHashMatch) {
+          return {
+            isDuplicate: true,
+            similarity: 100,
+            matchedMsg: prevMsg,
+            reason: "هش محتوای فایل/رسانه دریافتی قبل از ارسال دقیقاً با یکی از پست‌های قبلی کانال مطابقت دارد (جلوگیری از آپلود تکراری).",
+          };
+        }
+      }
+    }
+
+    // 3. Media Url / Basename matching across ALL source channels sending to this target channel
     if (checkMedia) {
-      if (areMediaUrlsMatching(mediaUrl, prevMsg.mediaUrl, mediaItems, prevMsg.mediaItems)) {
+      if (areMediaUrlsMatching(mediaUrl, prevMsg.mediaUrl, mediaItems, prevMsg.mediaItems, incomingMediaHashes, prevMsg.mediaContentHashes)) {
         return {
           isDuplicate: true,
           similarity: 100,
@@ -1040,15 +1180,20 @@ function checkIsDuplicatePost(
       }
     }
 
-    // 3. Text Similarity matching across ALL source channels sending to this target channel
-    if (newPostText && prevMsg.caption) {
-      const sim = calculateTextSimilarity(newPostText, prevMsg.caption);
-      if (sim >= thresholdPercent) {
+    // 4. Text Similarity matching across ALL source channels sending to this target channel
+    const textToCheck1 = newPostText || "";
+    const textToCheck2 = rawPostText || "";
+    if ((textToCheck1 || textToCheck2) && prevMsg.caption) {
+      const sim1 = textToCheck1 ? calculateTextSimilarity(textToCheck1, prevMsg.caption) : 0;
+      const sim2 = textToCheck2 ? calculateTextSimilarity(textToCheck2, prevMsg.caption) : 0;
+      const maxSim = Math.max(sim1, sim2);
+
+      if (maxSim >= thresholdPercent || (maxSim >= 75 && thresholdPercent >= 80)) {
         return {
           isDuplicate: true,
-          similarity: sim,
+          similarity: maxSim,
           matchedMsg: prevMsg,
-          reason: `شباهت متنی ${sim}٪ با یکی از پست‌های موجود در کانال ${targetChannel}`,
+          reason: `شباهت متنی ${maxSim}٪ با یکی از پست‌های موجود در کانال ${targetChannel}`,
         };
       }
     }
@@ -1341,13 +1486,143 @@ async function sendTelegramMessage(
       if (data.ok) return { ok: true, messageId: getMsgId(data) };
     }
 
+    // 2d. Send Animation (GIF)
+    if (method === "sendAnimation" && (payload.animation || payload.video)) {
+      const animUrl = payload.animation || payload.video;
+      let data = await callApi("sendAnimation", {
+        animation: animUrl,
+        caption: payload.caption || "",
+        parse_mode: "HTML",
+      });
+      if (data.ok) return { ok: true, messageId: getMsgId(data) };
+
+      const plainCaption = stripHtmlToPlainText(payload.caption || "");
+      data = await callApi("sendAnimation", {
+        animation: animUrl,
+        caption: plainCaption,
+      });
+      if (data.ok) return { ok: true, messageId: getMsgId(data) };
+
+      // Fallback: sendAnimation without caption (if caption formatting caused failure), never fallback to sendVideo
+      data = await callApi("sendAnimation", {
+        animation: animUrl,
+      });
+      if (data.ok) return { ok: true, messageId: getMsgId(data) };
+    }
+
     // 3. Send Media Group (Album)
-    if (method === "sendMediaGroup" && Array.isArray(payload.media)) {
+    if (method === "sendMediaGroup" && Array.isArray(payload.media) && payload.media.length > 0) {
       const normalizedMedia = payload.media.map((m: any) => ({
         ...m,
         media: m.type === "photo" ? getHighResMediaUrl(m.media) : m.media,
       }));
 
+      // 3a. Try Direct Binary Upload FIRST so all photos & videos stay together in ONE album post
+      try {
+        const formData = new FormData();
+        formData.append("chat_id", targetChannel);
+
+        const mediaToAttachHTML: any[] = [];
+        const mediaToAttachPlain: any[] = [];
+        let downloadedCount = 0;
+
+        for (let idx = 0; idx < normalizedMedia.length; idx++) {
+          const item = normalizedMedia[idx];
+          const mediaUrl = item.media;
+          let attachedName = `file${idx}`;
+          let attachSuccess = false;
+
+          try {
+            const mRes = await fetch(mediaUrl, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+              },
+            });
+            if (mRes.ok) {
+              const arrayBuffer = await mRes.arrayBuffer();
+              if (arrayBuffer.byteLength > 500) {
+                const contentType = mRes.headers.get("content-type") || (item.type === "video" ? "video/mp4" : "image/jpeg");
+                const filename = item.type === "video" ? `video_${idx}.mp4` : `photo_${idx}.jpg`;
+
+                formData.append(attachedName, new Blob([arrayBuffer], { type: contentType }), filename);
+                attachedName = `attach://${attachedName}`;
+                attachSuccess = true;
+                downloadedCount++;
+              }
+            }
+          } catch (e) {
+            console.error(`Error fetching media for album item ${idx}:`, e);
+          }
+
+          if (!attachSuccess) {
+            attachedName = mediaUrl;
+          }
+
+          const baseObj = {
+            type: item.type === "video" ? "video" : "photo",
+            media: attachedName,
+          };
+
+          mediaToAttachHTML.push({
+            ...baseObj,
+            ...(item.caption ? { caption: item.caption, parse_mode: "HTML" } : {}),
+          });
+
+          mediaToAttachPlain.push({
+            ...baseObj,
+            ...(item.caption ? { caption: stripHtmlToPlainText(item.caption) } : {}),
+          });
+        }
+
+        if (downloadedCount > 0) {
+          formData.append("media", JSON.stringify(mediaToAttachHTML));
+          const fdRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMediaGroup`, {
+            method: "POST",
+            body: formData,
+          });
+          const fdData = await fdRes.json();
+          if (fdData.ok) {
+            return { ok: true, messageId: getMsgId(fdData) };
+          } else {
+            console.warn("sendMediaGroup binary HTML upload failed:", fdData.description);
+          }
+
+          // Retry with plain text caption
+          const formDataPlain = new FormData();
+          formDataPlain.append("chat_id", targetChannel);
+          formDataPlain.append("media", JSON.stringify(mediaToAttachPlain));
+
+          let plainFileIndex = 0;
+          for (let idx = 0; idx < normalizedMedia.length; idx++) {
+            const item = normalizedMedia[idx];
+            try {
+              const mRes = await fetch(item.media, { headers: { "User-Agent": "Mozilla/5.0" } });
+              if (mRes.ok) {
+                const arrayBuffer = await mRes.arrayBuffer();
+                if (arrayBuffer.byteLength > 500) {
+                  const contentType = mRes.headers.get("content-type") || (item.type === "video" ? "video/mp4" : "image/jpeg");
+                  const filename = item.type === "video" ? `video_${idx}.mp4` : `photo_${idx}.jpg`;
+                  formDataPlain.append(`file${plainFileIndex}`, new Blob([arrayBuffer], { type: contentType }), filename);
+                  plainFileIndex++;
+                }
+              }
+            } catch (e) {}
+          }
+
+          const fdResPlain = await fetch(`https://api.telegram.org/bot${botToken}/sendMediaGroup`, {
+            method: "POST",
+            body: formDataPlain,
+          });
+          const fdDataPlain = await fdResPlain.json();
+          if (fdDataPlain.ok) {
+            return { ok: true, messageId: getMsgId(fdDataPlain) };
+          }
+        }
+      } catch (err) {
+        console.error("Binary sendMediaGroup exception:", err);
+      }
+
+      // 3b. Fallback: URL-based sendMediaGroup
       const mediaHTML = normalizedMedia.map((m: any) => ({
         ...m,
         parse_mode: "HTML",
@@ -1362,32 +1637,23 @@ async function sendTelegramMessage(
       data = await callApi("sendMediaGroup", { media: mediaPlain });
       if (data.ok) return { ok: true, messageId: getMsgId(data) };
 
-      let sentAny = false;
-      let lastMsgId: number | undefined;
-      for (const item of normalizedMedia) {
-        if (item.type === "photo") {
-          const r = await sendTelegramMessage(botToken, targetChannel, {
-            method: "sendPhoto",
-            photo: item.media,
-            caption: item.caption || "",
-          });
-          if (r.ok) {
-            sentAny = true;
-            lastMsgId = r.messageId;
-          }
-        } else if (item.type === "video") {
-          const r = await sendTelegramMessage(botToken, targetChannel, {
+      // 3c. Final fallback: send first item with caption
+      if (normalizedMedia.length > 0) {
+        const first = normalizedMedia[0];
+        if (first.type === "video") {
+          return await sendTelegramMessage(botToken, targetChannel, {
             method: "sendVideo",
-            video: item.media,
-            caption: item.caption || "",
+            video: first.media,
+            caption: first.caption || "",
           });
-          if (r.ok) {
-            sentAny = true;
-            lastMsgId = r.messageId;
-          }
+        } else {
+          return await sendTelegramMessage(botToken, targetChannel, {
+            method: "sendPhoto",
+            photo: first.media,
+            caption: first.caption || "",
+          });
         }
       }
-      if (sentAny) return { ok: true, messageId: lastMsgId };
     }
 
     // 4. Send Message (Text)
@@ -1730,8 +1996,12 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       // Extract Photos: Search ONLY in photo wrappers outside text and video wrappers
       $post.find(".tgme_widget_message_photo_wrap, .tgme_widget_message_photo, a.tgme_widget_message_photo_wrap, .tgme_widget_message_grouped_layer_item, .tgme_widget_message_grouped_item").each((_, photoEl) => {
         const $p = $(photoEl);
-        // Exclude elements inside message text, author/user avatar wrappers, OR video wrappers
+        // Exclude elements inside message text, author/user avatar wrappers, OR video wrappers/containers
         if ($p.closest(".js-message_text, .tgme_widget_message_text, .emoji, tg-emoji, .tgme_widget_message_user_photo, .tgme_widget_message_author_photo, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player").length > 0) {
+          return;
+        }
+        // If this element contains a video tag or video player inside, skip photo extraction (video poster frame)
+        if ($p.find("video, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, a.tgme_widget_message_video_player").length > 0) {
           return;
         }
 
@@ -1775,21 +2045,11 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       let hasPhoto = mediaItems.some(m => m.type === 'photo');
       let photoUrl = mediaItems.find(m => m.type === 'photo')?.url;
 
-      const hasVideo = mediaItems.some(m => m.type === 'video');
+      let hasVideo = mediaItems.some(m => m.type === 'video');
       const videoUrl = mediaItems.find(m => m.type === 'video')?.url;
 
-      // Check if this post is a single video post (not a real Telegram media group album)
+      // Check if this post is a single video/GIF post (not a real Telegram media group album)
       const hasGroupedLayout = $post.find(".tgme_widget_message_grouped_layer, .tgme_widget_message_grouped_layer_item").length > 0 || $post.hasClass("tgme_widget_message_grouped");
-      if (hasVideo && !hasGroupedLayout) {
-        // Single video post: exclude video preview poster thumbnails from photo mediaItems
-        for (let i = mediaItems.length - 1; i >= 0; i--) {
-          if (mediaItems[i].type === 'photo') {
-            mediaItems.splice(i, 1);
-          }
-        }
-        hasPhoto = false;
-        photoUrl = undefined;
-      }
 
       // Extract Voice Audio URL
       let voiceUrl: string | undefined = undefined;
@@ -1842,16 +2102,33 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       const hasAudio = $post.find(".tgme_widget_message_audio").length > 0;
       const hasDocument = $post.find(".tgme_widget_message_document").length > 0;
       const hasSticker = $post.find(".tgme_widget_message_sticker").length > 0;
-      const hasGif = $post.find(".tgme_widget_message_gif_wrap").length > 0;
+      const hasGif = $post.find(".tgme_widget_message_gif_wrap, .tgme_widget_message_gif, i.tgme_widget_message_video_gif").length > 0 ||
+                     $post.find(".tgme_widget_message_video_player.gif").length > 0;
+
+      if (hasGif && !hasGroupedLayout) {
+        hasVideo = false;
+      }
+
+      if ((hasVideo || hasGif) && !hasGroupedLayout) {
+        // Single video/GIF post: exclude video preview poster thumbnails from photo mediaItems
+        for (let i = mediaItems.length - 1; i >= 0; i--) {
+          if (mediaItems[i].type === 'photo') {
+            mediaItems.splice(i, 1);
+          }
+        }
+        hasPhoto = false;
+        photoUrl = undefined;
+      }
+
       const isMediaGroup = mediaItems.length > 1;
 
       let type: ForwardedMessageRecord["type"] = "text";
       if (isMediaGroup) type = "media_group";
+      else if (hasGif) type = "animation";
       else if (hasPhoto) type = "photo";
       else if (hasVideoNote) type = "video_note";
       else if (hasVideo) type = "video";
       else if (hasVoice) type = "voice";
-      else if (hasGif) type = "animation";
       else if (hasAudio) type = "audio";
       else if (hasDocument) type = "document";
 
@@ -1878,24 +2155,98 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
 
     posts.sort((a, b) => a.msgId - b.msgId);
 
+    // 1. Deduplicate posts by msgId
+    const uniquePostsMap = new Map<number, ScrapedPost>();
+    for (const p of posts) {
+      if (!uniquePostsMap.has(p.msgId)) {
+        uniquePostsMap.set(p.msgId, p);
+      } else {
+        const existing = uniquePostsMap.get(p.msgId)!;
+        if ((p.mediaItems?.length || 0) > (existing.mediaItems?.length || 0)) {
+          if (!p.text && existing.text) p.text = existing.text;
+          uniquePostsMap.set(p.msgId, p);
+        } else if (existing.mediaItems?.length === p.mediaItems?.length) {
+          if (!existing.text && p.text) existing.text = p.text;
+        }
+      }
+    }
+    const deduplicatedPosts = Array.from(uniquePostsMap.values());
+
+    // 2. Collapse contiguous Telegram album/media group messages that share media items
+    const collapsedPosts: ScrapedPost[] = [];
+    for (const post of deduplicatedPosts) {
+      if (collapsedPosts.length === 0) {
+        collapsedPosts.push(post);
+        continue;
+      }
+      const prev = collapsedPosts[collapsedPosts.length - 1];
+
+      const prevUrls = new Set((prev.mediaItems || []).map(m => m.url).filter(Boolean));
+      const currUrls = (post.mediaItems || []).map(m => m.url).filter(Boolean);
+
+      let isDuplicateAlbumItem = false;
+      if (prevUrls.size > 0 && currUrls.length > 0) {
+        const matchCount = currUrls.filter(u => prevUrls.has(u)).length;
+        if (matchCount > 0 && (matchCount === currUrls.length || matchCount === prevUrls.size)) {
+          isDuplicateAlbumItem = true;
+        } else {
+          const prevBase = Array.from(prevUrls).map(extractMediaBasename).filter(Boolean);
+          const currBase = currUrls.map(extractMediaBasename).filter(Boolean);
+          const baseMatch = currBase.some(b => prevBase.includes(b));
+          if (baseMatch && (prev.isMediaGroup || post.isMediaGroup || prev.hasVideo || post.hasVideo)) {
+            isDuplicateAlbumItem = true;
+          }
+        }
+      }
+
+      if (isDuplicateAlbumItem) {
+        for (const item of (post.mediaItems || [])) {
+          if (!prev.mediaItems.some(m => m.url === item.url)) {
+            prev.mediaItems.push(item);
+          }
+        }
+        if (prev.mediaItems.length > 1) {
+          prev.isMediaGroup = true;
+          prev.type = "media_group";
+        }
+        if (!prev.text && post.text) {
+          prev.text = post.text;
+        }
+        prev.msgId = Math.max(prev.msgId, post.msgId);
+      } else {
+        collapsedPosts.push(post);
+      }
+    }
+
     // Upgrade photo quality by fetching dedicated post embed data (photos only)
-    for (const post of posts) {
-      if ((post.hasPhoto || post.isMediaGroup) && !post.hasVideo && post.type !== "video") {
+    for (const post of collapsedPosts) {
+      if ((post.hasPhoto || post.isMediaGroup) && !post.hasVideo && post.type !== "video" && post.type !== "animation") {
         const embedMedia = await fetchHighResEmbedMedia(cleanName, post.msgId);
         if (embedMedia.photos && embedMedia.photos.length > 0) {
-          post.photoUrl = embedMedia.photos[0];
-          const videoItems = post.mediaItems.filter(m => m.type === 'video');
-          const newPhotoItems = embedMedia.photos.map(url => ({ type: 'photo' as const, url }));
-          post.mediaItems = [...newPhotoItems, ...videoItems];
-          if (post.mediaItems.length > 1) {
-            post.isMediaGroup = true;
-            post.type = "media_group";
+          if (post.isMediaGroup && post.mediaItems.length > 1) {
+            post.photoUrl = embedMedia.photos[0];
+            const firstPhoto = post.mediaItems.find(m => m.type === 'photo');
+            if (firstPhoto) firstPhoto.url = embedMedia.photos[0];
+          } else if (embedMedia.photos.length > 1) {
+            post.photoUrl = embedMedia.photos[0];
+            const videoItems = post.mediaItems.filter(m => m.type === 'video');
+            const newPhotoItems = embedMedia.photos.map(url => ({ type: 'photo' as const, url }));
+            post.mediaItems = [...newPhotoItems, ...videoItems];
+            if (post.mediaItems.length > 1) {
+              post.isMediaGroup = true;
+              post.type = "media_group";
+            }
+          } else {
+            post.photoUrl = embedMedia.photos[0];
+            if (post.mediaItems.length === 1 && post.mediaItems[0].type === 'photo') {
+              post.mediaItems[0].url = embedMedia.photos[0];
+            }
           }
         }
       }
     }
 
-    return { ok: true, posts, channelTitle };
+    return { ok: true, posts: collapsedPosts, channelTitle };
   } catch (e: any) {
     return { ok: false, posts: [], error: `خطا در دریافت اطلاعات کانال: ${e.message || 'fetch failed'}` };
   }
@@ -1973,14 +2324,16 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
       // 2. Text Transformation & AI Rewriting
       const transformedText = await applyTextTransformations(post.text, conn.settings, conn.sourceChannel, conn.targetChannel);
 
-      // 2b. Global Target Channel Supervisor Duplicate Check
+      // 2b. Compute media hashes and check Supervisor duplicates
+      const primaryMediaUrl = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
+      const incomingMediaHashes = await computeAllMediaHashes(primaryMediaUrl, post.mediaItems);
+
       const preventDuplicates = conn.settings?.preventDuplicates ?? true;
       const similarityThreshold = conn.settings?.duplicateSimilarityThreshold ?? 80;
       const checkMedia = conn.settings?.checkMediaDuplicate ?? true;
       const duplicateAction = conn.settings?.duplicateAction || 'skip';
 
       if (preventDuplicates) {
-        const primaryMediaUrl = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
         const dupCheck = checkIsDuplicatePost(
           conn.targetChannel,
           transformedText,
@@ -1989,7 +2342,9 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
           checkMedia,
           post.mediaItems,
           post.msgId,
-          conn.id
+          conn.id,
+          post.text,
+          incomingMediaHashes
         );
 
         if (dupCheck.isDuplicate) {
@@ -2007,11 +2362,11 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
       }
 
       // 2c. Dedicated / Singleton Global Channel Supervisor Check
-      const primaryMediaForGlobal = post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url);
       const globalDupCheck = globalSupervisor.checkDuplicate({
         text: transformedText,
-        mediaUrl: primaryMediaForGlobal,
+        mediaUrl: primaryMediaUrl,
         mediaItems: post.mediaItems,
+        mediaContentHashes: incomingMediaHashes,
         targetChannel: conn.targetChannel,
         connectionId: conn.id,
         settings: conn.settings,
@@ -2051,6 +2406,12 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         payload = {
           method: "sendVoice",
           voice: effectiveVoiceUrl,
+          ...(transformedText ? { caption: transformedText } : {}),
+        };
+      } else if (post.hasGif || post.type === "animation") {
+        payload = {
+          method: "sendAnimation",
+          animation: post.videoUrl || post.photoUrl || post.mediaItems?.find(m => m.url)?.url,
           ...(transformedText ? { caption: transformedText } : {}),
         };
       } else if ((post.mediaItems && post.mediaItems.length > 1) || post.isMediaGroup) {
@@ -2095,8 +2456,9 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         caption: transformedText,
         transferredAt: new Date().toISOString(),
         status: "success",
-        mediaUrl: post.photoUrl || post.videoUrl || (post.mediaItems && post.mediaItems[0]?.url),
+        mediaUrl: primaryMediaUrl,
         mediaItems: post.mediaItems,
+        mediaContentHashes: incomingMediaHashes,
       };
       messages.unshift(record);
       writeJsonFile(MESSAGES_FILE, messages);
@@ -2106,6 +2468,8 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         id: record.id,
         caption: record.caption || "",
         mediaUrl: record.mediaUrl,
+        mediaItems: record.mediaItems,
+        mediaContentHashes: incomingMediaHashes,
         targetChannel: conn.targetChannel,
         sourceChannel: conn.sourceChannel,
         connectionId: conn.id,

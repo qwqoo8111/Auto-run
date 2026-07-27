@@ -90,6 +90,7 @@ export interface ForwardedMessageRecord {
   status: 'success' | 'failed';
   mediaUrl?: string;
   mediaItems?: { type: 'photo' | 'video'; url: string }[];
+  mediaContentHashes?: string[];
 }
 
 export interface CreateConnectionDTO {
