@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap, Key, ArrowUp } from 'lucide-react';
 import { TelegramConnection } from '../types';
 import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, AutoTrendConfig } from '../services/api';
 
@@ -15,6 +15,13 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
   connections,
 }) => {
   const [activeTab, setActiveTab] = useState<'link' | 'trends'>('trends');
+  const modalContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTop = () => {
+    if (modalContainerRef.current) {
+      modalContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // Tab 1: Link Extractor State
   const [urlInput, setUrlInput] = useState('');
@@ -34,6 +41,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
   // Unified AI Trend Hunter State (Shared Live & Auto)
   const [trendTopic, setTrendTopic] = useState('اخبار فوری و ترندهای داغ جهان در X');
   const [trendCount, setTrendCount] = useState<number>(3);
+  const [combineIntoSinglePost, setCombineIntoSinglePost] = useState<boolean>(false);
   const [isSearchingTrends, setIsSearchingTrends] = useState(false);
   const [isInstantPosting, setIsInstantPosting] = useState(false);
   const [trendResults, setTrendResults] = useState<Array<{
@@ -46,6 +54,12 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
     topicCategory?: string;
   }>>([]);
 
+  // User AI API Key State (Required for X Trends)
+  const [userAiApiKey, setUserAiApiKey] = useState<string>(() => {
+    return localStorage.getItem('autorun_user_ai_api_key') || '';
+  });
+  const [userAiProvider, setUserAiProvider] = useState<string>('gemini');
+
   // Auto Trend Scheduler State
   const [autoConfig, setAutoConfig] = useState<AutoTrendConfig>({
     enabled: false,
@@ -54,6 +68,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
     topic: 'اخبار فوری و ترندهای داغ جهان در X',
     intervalHours: 24,
     countPerRun: 3,
+    combineIntoSinglePost: false,
     logs: [],
   });
   const [customIntervalInput, setCustomIntervalInput] = useState<string>('24');
@@ -87,6 +102,16 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         if (res.config.countPerRun) setTrendCount(res.config.countPerRun);
         if (res.config.topic) setTrendTopic(res.config.topic);
         if (res.config.intervalHours) setCustomIntervalInput(String(res.config.intervalHours));
+        if (res.config.combineIntoSinglePost !== undefined) {
+          setCombineIntoSinglePost(Boolean(res.config.combineIntoSinglePost));
+        }
+        if (res.config.apiKey) {
+          setUserAiApiKey(res.config.apiKey);
+          localStorage.setItem('autorun_user_ai_api_key', res.config.apiKey);
+        }
+        if (res.config.provider) {
+          setUserAiProvider(res.config.provider);
+        }
       }
     } catch (err) {
       console.warn("Failed to load auto trend config:", err);
@@ -129,7 +154,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // Sync count between Live & Auto
   const updateTrendCountShared = (cnt: number) => {
-    const validCount = Math.max(1, Math.min(10, cnt));
+    const validCount = Math.max(1, Math.min(30, cnt));
     setTrendCount(validCount);
     setAutoConfig((prev) => ({ ...prev, countPerRun: validCount }));
   };
@@ -172,6 +197,11 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // 1. Search Manual Preview
   const handleSearchTrendsManual = async () => {
+    if (!userAiApiKey.trim()) {
+      setStatusMessage({ type: 'error', text: 'لطفاً ابتدا کلید API اختصاصی هوش مصنوعی خود را در کادر مربوطه وارد کنید.' });
+      return;
+    }
+
     setIsSearchingTrends(true);
     setStatusMessage(null);
     setTrendResults([]);
@@ -180,11 +210,16 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
       const res = await fetchAiXTrends({
         topic: trendTopic.trim(),
         count: trendCount,
+        apiKey: userAiApiKey.trim(),
+        provider: userAiProvider,
       });
 
       if (res && res.trends && res.trends.length > 0) {
         setTrendResults(res.trends);
-        setStatusMessage({ type: 'success', text: `تعداد ${res.trends.length} ترند داغ استخراج شد. می‌توانید قبل از ارسال ویرایش کنید.` });
+        setStatusMessage({
+          type: 'success',
+          text: `⚡ تعداد ${res.trends.length} ترند داغ استخراج گردید. نتایج در پایین نمایش داده شد؛ می‌توانید پیش‌نمایش را بررسی و به انتخاب خود ارسال نمایید.`,
+        });
       } else {
         setStatusMessage({ type: 'error', text: 'ترندی برای این موضوع پیدا نشد. موضوع دیگری را امتحان کنید.' });
       }
@@ -197,6 +232,11 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // 2. Search & Instant Auto-Post to Channel
   const handleSearchAndPostInstant = async () => {
+    if (!userAiApiKey.trim()) {
+      setStatusMessage({ type: 'error', text: 'لطفاً ابتدا کلید API اختصاصی هوش مصنوعی خود را در کادر مربوطه وارد کنید.' });
+      return;
+    }
+
     const { botToken, targetChannel } = getTargetCredentials();
     if (!botToken || !targetChannel) {
       setStatusMessage({ type: 'error', text: 'لطفاً یک اتصال فعال انتخاب کنید یا توکن ربات و کانال مقصد را وارد نمایید.' });
@@ -210,33 +250,107 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
       const res = await fetchAiXTrends({
         topic: trendTopic.trim(),
         count: trendCount,
+        apiKey: userAiApiKey.trim(),
+        provider: userAiProvider,
       });
 
       if (res && res.trends && res.trends.length > 0) {
         setTrendResults(res.trends);
-        let successCount = 0;
 
-        for (const item of res.trends) {
-          if (!item.telegramText) continue;
+        if (combineIntoSinglePost && res.trends.length > 1) {
+          const cleanTag = trendTopic.trim().replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+          const header = `🔥 **خلاصه و جمع‌بندی داغ‌ترین ترندها (${res.trends.length} موضوع در ۱ پیام):**\n\n`;
+          const itemsText = res.trends.map((item, idx) => {
+            const tTitle = item.title || `موضوع ${idx + 1}`;
+            const tSummary = item.originalSummary || item.telegramText || '';
+            return `🔹 **${idx + 1}. ${tTitle}**\n${tSummary}`;
+          }).join('\n\n---\n\n');
+
+          const combinedText = `${header}📌 **موضوع:** ${trendTopic.trim()}\n\n${itemsText}\n\n⚡ **منبع: کاوشگر زنده X و وب** | #${cleanTag} #خلاصه_اخبار`;
+
           const sendRes = await postExperimentalToTelegram({
             botToken,
             targetChannel,
-            text: item.telegramText,
+            text: combinedText,
           });
-          if (sendRes.ok) {
-            successCount++;
-          }
-        }
 
-        setStatusMessage({
-          type: 'success',
-          text: `⚡ تعداد ${successCount} ترند جدید به صورت زنده به کانال ${targetChannel} ارسال شد!`,
-        });
+          if (sendRes.ok) {
+            setStatusMessage({
+              type: 'success',
+              text: `⚡ تمام ${res.trends.length} ترند در قالب ۱ پیام خلاصه‌شده با موفقیت به کانال ${targetChannel} ارسال شد!`,
+            });
+          } else {
+            setStatusMessage({ type: 'error', text: `خطا در ارسال: ${sendRes.error || 'ناشناخته'}` });
+          }
+        } else {
+          let successCount = 0;
+          for (const item of res.trends) {
+            if (!item.telegramText) continue;
+            const sendRes = await postExperimentalToTelegram({
+              botToken,
+              targetChannel,
+              text: item.telegramText,
+              mediaUrls: item.mediaUrls,
+            });
+            if (sendRes.ok) {
+              successCount++;
+            }
+          }
+
+          setStatusMessage({
+            type: 'success',
+            text: `⚡ تعداد ${successCount} ترند جدید به صورت زنده به کانال ${targetChannel} ارسال شد!`,
+          });
+        }
       } else {
         setStatusMessage({ type: 'error', text: 'ترندی برای این موضوع پیدا نشد.' });
       }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'خطا در کاوش و ارسال زنده به کانال.' });
+    } finally {
+      setIsInstantPosting(false);
+    }
+  };
+
+  // Handle Post All Trends Combined into Single Message (Manual Mode)
+  const handlePostAllCombined = async () => {
+    if (trendResults.length === 0) return;
+    const { botToken, targetChannel } = getTargetCredentials();
+    if (!botToken || !targetChannel) {
+      setStatusMessage({ type: 'error', text: 'لطفاً یک اتصال فعال انتخاب کنید یا توکن ربات و کانال مقصد را وارد نمایید.' });
+      return;
+    }
+
+    setIsInstantPosting(true);
+    setStatusMessage(null);
+
+    try {
+      const cleanTag = trendTopic.trim().replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+      const header = `🔥 **خلاصه و جمع‌بندی داغ‌ترین ترندها (${trendResults.length} موضوع در ۱ پیام):**\n\n`;
+      const itemsText = trendResults.map((item, idx) => {
+        const tTitle = item.title || `موضوع ${idx + 1}`;
+        const tSummary = item.originalSummary || item.telegramText || '';
+        return `🔹 **${idx + 1}. ${tTitle}**\n${tSummary}`;
+      }).join('\n\n---\n\n');
+
+      const combinedText = `${header}📌 **موضوع:** ${trendTopic.trim()}\n\n${itemsText}\n\n⚡ **منبع: کاوشگر زنده X و وب** | #${cleanTag} #خلاصه_اخبار`;
+
+      const sendRes = await postExperimentalToTelegram({
+        botToken,
+        targetChannel,
+        text: combinedText,
+      });
+
+      if (sendRes.ok) {
+        setStatusMessage({
+          type: 'success',
+          text: `⚡ تمامی ${trendResults.length} ترند به صورت ۱ پیام خلاصه‌شده واحد به کانال ${targetChannel} ارسال گردید!`,
+        });
+      } else {
+        setStatusMessage({ type: 'error', text: `خطا در ارسال: ${sendRes.error || 'ناشناخته'}` });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'خطا در ارسال ترندهای خلاصه‌شده.' });
     } finally {
       setIsInstantPosting(false);
     }
@@ -294,6 +408,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         botToken,
         targetChannel,
         text: item.telegramText,
+        mediaUrls: item.mediaUrls,
       });
 
       if (res.ok) {
@@ -317,6 +432,11 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
       return;
     }
 
+    if (autoConfig.enabled && !userAiApiKey.trim()) {
+      setStatusMessage({ type: 'error', text: 'ورود کلید API اختصاصی هوش مصنوعی جهت فعال‌سازی ارسال خودکار ترندها الزامی است.' });
+      return;
+    }
+
     const intervalVal = Math.max(0.05, parseFloat(customIntervalInput) || 24);
 
     setIsSavingAuto(true);
@@ -331,6 +451,9 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         topic: trendTopic.trim(),
         countPerRun: trendCount,
         intervalHours: intervalVal,
+        combineIntoSinglePost: combineIntoSinglePost,
+        apiKey: userAiApiKey.trim(),
+        provider: userAiProvider,
       };
 
       const res = await saveAutoTrendConfig(payload);
@@ -339,7 +462,9 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         setStatusMessage({
           type: 'success',
           text: res.config.enabled
-            ? `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تعداد ${trendCount} پست به ${targetChannel} ارسال می‌گردد.`
+            ? res.config.combineIntoSinglePost
+              ? `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تمام ${trendCount} ترند به صورت ۱ پیام خلاصه به ${targetChannel} ارسال می‌گردد.`
+              : `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تعداد ${trendCount} پست مجزا به ${targetChannel} ارسال می‌گردد.`
             : 'ارسال خودکار زمان‌بندی‌شده متوقف شد.',
         });
       } else {
@@ -353,8 +478,8 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto dir-rtl">
-      <div className="relative w-full max-w-4xl neu-flat bg-slate-900/95 border border-blue-500/30 rounded-3xl p-5 sm:p-7 shadow-2xl my-8 text-slate-100">
+    <div ref={modalContainerRef} className="fixed inset-0 z-50 overflow-y-auto scroll-smooth bg-black/80 backdrop-blur-md p-3 sm:p-4 dir-rtl flex justify-center items-start min-h-full">
+      <div className="relative w-full max-w-4xl neu-flat bg-slate-900/95 border border-blue-500/30 rounded-3xl p-5 sm:p-7 shadow-2xl my-auto sm:my-8 text-slate-100 shrink-0">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 mb-5 border-b border-white/10">
@@ -454,20 +579,24 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         {/* Feedback Alert */}
         {statusMessage && (
           <div
-            className={`mb-5 p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 ${
+            className={`mb-5 p-4 rounded-2xl text-xs flex items-center gap-3 shadow-md ${
               statusMessage.type === 'success'
-                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200'
+                ? 'bg-emerald-900/80 border-2 border-emerald-400 text-white font-black'
                 : statusMessage.type === 'error'
-                ? 'bg-rose-500/20 border-rose-500/50 text-rose-200'
-                : 'bg-blue-500/20 border-blue-500/50 text-blue-200'
+                ? 'bg-rose-200 border-2 border-rose-600 text-black font-black shadow-lg'
+                : 'bg-blue-900/80 border-2 border-blue-400 text-white font-black'
             }`}
           >
             {statusMessage.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 shrink-0 text-emerald-400" />
+              <CheckCircle className="w-5 h-5 shrink-0 text-emerald-300" />
+            ) : statusMessage.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-800" />
             ) : (
-              <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+              <AlertCircle className="w-5 h-5 shrink-0 text-amber-300" />
             )}
-            <span>{statusMessage.text}</span>
+            <span className={`leading-relaxed text-xs font-black ${statusMessage.type === 'error' ? 'text-black font-bold' : 'text-white'}`}>
+              {statusMessage.text}
+            </span>
           </div>
         )}
 
@@ -475,6 +604,55 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         {activeTab === 'trends' && (
           <div className="space-y-6">
             
+            {/* User AI API Key Configuration Card */}
+            <div className="p-4 neu-inset rounded-2xl border border-purple-500/30 bg-purple-950/30 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs font-black text-purple-200 flex items-center gap-1.5">
+                  <Key className="w-4 h-4 text-purple-400" />
+                  <span>کلید API اختصاصی هوش مصنوعی کاربر (جهت کاوش و بروزرسانی خودکار ترندهای X):</span>
+                  <span className="text-rose-400 font-bold">* (الزامی)</span>
+                </label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-amber-300 hover:text-amber-200 underline font-bold"
+                >
+                  دریافت کلید رایگان Gemini از Google AI Studio ➔
+                </a>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="md:col-span-3">
+                  <input
+                    type="password"
+                    value={userAiApiKey}
+                    onChange={(e) => {
+                      setUserAiApiKey(e.target.value);
+                      localStorage.setItem('autorun_user_ai_api_key', e.target.value.trim());
+                    }}
+                    placeholder="کلید API اختصاصی Gemini یا سرویس مورد نظر (مثال: AIzaSy...)"
+                    className="w-full p-2.5 text-xs font-mono bg-slate-900 border border-purple-500/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 dir-ltr text-right"
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <select
+                    value={userAiProvider}
+                    onChange={(e) => setUserAiProvider(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-slate-900 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
+                  >
+                    <option value="gemini">Google Gemini</option>
+                    <option value="openai">OpenAI (ChatGPT)</option>
+                    <option value="deepseek">DeepSeek AI</option>
+                    <option value="claude">Anthropic Claude</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                🔒 طبق دستورالعمل، کلید پیش‌فرض سیستم حذف گردیده و هر کاربر جهت دریافت و بروزرسانی خودکار ترندها باید کلید API اختصاصی خود را وارد نماید.
+              </p>
+            </div>
+
             {/* Main Topic & Count Controls */}
             <div className="p-5 neu-inset rounded-2xl border border-white/10 bg-slate-800/40 space-y-4">
               <div>
@@ -492,41 +670,53 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
               </div>
 
               {/* Point 1: High Contrast Preset Topic Badges */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-slate-200 block">موضوعات آماده جهت انتخاب سریع:</span>
+              <div className="space-y-2">
+                <span className="text-xs font-black text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>موضوعات آماده جهت انتخاب سریع:</span>
+                </span>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {presetTopics.map((pt, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => updateTrendTopicShared(pt.topic)}
-                      className="text-xs px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-950/90 to-indigo-950/90 hover:from-purple-600 hover:to-indigo-600 border border-purple-400/50 text-white font-black shadow-md hover:shadow-purple-500/20 transition-all cursor-pointer"
-                    >
-                      {pt.label}
-                    </button>
-                  ))}
+                  {presetTopics.map((pt, idx) => {
+                    const isSelected = trendTopic === pt.topic;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => updateTrendTopicShared(pt.topic)}
+                        className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-2 border-amber-300 shadow-md shadow-purple-500/30 scale-105'
+                            : 'bg-black text-white hover:bg-slate-900 border border-slate-700 shadow-sm'
+                        }`}
+                      >
+                        <span>{pt.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Point 3 & 4: Shared Post Count Selector */}
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-3">
+              <div className="pt-3 border-t border-white/10 flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-slate-200">تعداد پست ترند در هر بار (مشترک کاوش زنده و خودکار):</span>
+                  <span className="text-xs font-black text-white">تعداد پست ترند در هر بار (مشترک کاوش زنده و خودکار):</span>
                   {[1, 3, 5, 10, 15, 20, 24, 30].map((cnt) => (
                     <button
                       key={cnt}
+                      type="button"
                       onClick={() => updateTrendCountShared(cnt)}
-                      className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                      className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
                         trendCount === cnt
-                          ? 'bg-purple-600 text-white shadow-md shadow-purple-500/30'
-                          : 'bg-slate-900 text-slate-300 hover:text-white border border-white/10'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-2 border-amber-300 shadow-md shadow-purple-500/30 scale-105'
+                          : 'bg-black text-white hover:bg-slate-900 border border-slate-700 shadow-sm'
                       }`}
                     >
                       {cnt} پست
                     </button>
                   ))}
 
-                  <div className="flex items-center gap-1.5 bg-slate-900 border border-white/20 rounded-xl px-3 py-1.5">
-                    <span className="text-[11px] text-slate-300 font-bold">عدد سفارشی:</span>
+                  <div className="flex items-center gap-1.5 bg-black border border-slate-700 rounded-xl px-3.5 py-2 shadow-sm">
+                    <span className="text-[11px] text-slate-100 font-bold">عدد سفارشی:</span>
                     <input
                       type="number"
                       min={1}
@@ -535,45 +725,58 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                       onChange={(e) => updateTrendCountShared(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))}
                       className="w-12 text-xs font-black bg-transparent text-amber-300 text-center focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400 font-bold">پست</span>
+                    <span className="text-[10px] text-slate-200 font-bold">پست</span>
                   </div>
                 </div>
               </div>
 
-              {/* Instant Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-white/10">
-                <button
-                  onClick={handleSearchAndPostInstant}
-                  disabled={isInstantPosting || isSearchingTrends}
-                  className="py-3.5 px-5 neu-button bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-500 hover:to-teal-500 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isInstantPosting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>در حال کاوش و ارسال مستقیم به کانال...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300 animate-bounce" />
-                      <span>⚡ کاوش و ارسال زنده به کانال (در لحظه)</span>
-                    </>
-                  )}
-                </button>
+              {/* Toggle Option for Consolidating Trends when count > 2 */}
+              {trendCount > 2 && (
+                <div className="p-4 bg-purple-900/60 border-2 border-purple-400/80 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-lg animate-fadeIn">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-purple-500/30 text-purple-200 border border-purple-300/50 shrink-0">
+                      <Sparkles className="w-5 h-5 text-amber-300" />
+                    </div>
+                    <div>
+                      <span className="font-black text-white text-xs block mb-0.5">خلاصه‌سازی و ارسال تمام {trendCount} ترند در ۱ پیام واحد</span>
+                      <span className="text-[11px] text-purple-100 font-bold leading-relaxed block">
+                        اختیاری: تمام {trendCount} ترند به جای {trendCount} پست جداگانه، به صورت ۱ پیام خلاصه‌شده و شیک جمع‌بندی می‌گردند.
+                      </span>
+                    </div>
+                  </div>
 
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={combineIntoSinglePost}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setCombineIntoSinglePost(val);
+                        setAutoConfig((prev) => ({ ...prev, combineIntoSinglePost: val }));
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                  </label>
+                </div>
+              )}
+
+              {/* Search Action Button */}
+              <div className="pt-3 border-t border-white/10">
                 <button
                   onClick={handleSearchTrendsManual}
-                  disabled={isSearchingTrends || isInstantPosting}
-                  className="py-3.5 px-5 neu-button bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-500/20 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  disabled={isSearchingTrends}
+                  className="w-full py-4 px-6 neu-button bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:via-indigo-500 hover:to-pink-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-xl shadow-purple-500/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50"
                 >
                   {isSearchingTrends ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>در حال کاوش ترندها...</span>
+                      <RefreshCw className="w-5 h-5 animate-spin text-amber-300" />
+                      <span>در حال کاوش و استخراج ترندهای زنده...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4 text-amber-300" />
-                      <span>🔍 کاوش و پیش‌نمایش دستی قبل ارسال</span>
+                      <Sparkles className="w-5 h-5 text-amber-300 fill-amber-300 animate-bounce" />
+                      <span>🔍 کاوش و استخراج زنده ترندها (نمایش پیش‌نمایش جهت بررسی و ارسال)</span>
                     </>
                   )}
                 </button>
@@ -609,19 +812,19 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
               </div>
 
               {/* Live Search Notice Banner */}
-              <div className="p-3 bg-blue-950/60 border border-blue-500/40 rounded-xl text-xs text-blue-200 flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+              <div className="p-4 bg-blue-900/50 border-2 border-blue-400/60 rounded-xl text-xs text-blue-100 flex items-start gap-3 shadow-md">
+                <Sparkles className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <span className="font-bold text-white block">🔍 تضمین کاوش لحظه‌ای قبل از هر ارسال خودکار:</span>
-                  <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
+                  <span className="font-black text-white text-xs block">🔍 تضمین کاوش لحظه‌ای قبل از هر ارسال خودکار:</span>
+                  <p className="text-[11px] text-blue-100 leading-relaxed font-bold">
                     ربات پیش از ارسال، مطالب قدیمی را مجدداً استفاده نمی‌کند؛ بلکه دقیقاً سر رأس هر زمان‌بندی (مثلاً هر {customIntervalInput} ساعت)، سرچ زنده آنلاین انجام داده و اخبار، ترندها، جوک‌ها و میم‌های همان لحظه را استخراج، بازنویسی و مستقیماً به کانال ارسال می‌کند.
                   </p>
                 </div>
               </div>
 
               {/* Point 3: Customizable Interval controls */}
-              <div className="space-y-2">
-                <label className="block text-xs font-black text-amber-300 flex items-center gap-1.5">
+              <div className="space-y-2.5">
+                <label className="block text-xs font-black text-white flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-amber-400" />
                   <span>فاصله زمانی انتشار خودکار (چند ساعت یکبار):</span>
                 </label>
@@ -643,18 +846,18 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                         setCustomIntervalInput(String(preset.hrs));
                         setAutoConfig({ ...autoConfig, intervalHours: preset.hrs });
                       }}
-                      className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                      className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
                         Number(customIntervalInput) === preset.hrs
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30'
-                          : 'bg-slate-900 text-slate-300 hover:text-white border border-white/10'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-2 border-amber-300 shadow-md shadow-purple-500/30 scale-105'
+                          : 'bg-black text-white hover:bg-slate-900 border border-slate-700 shadow-sm'
                       }`}
                     >
                       {preset.label}
                     </button>
                   ))}
 
-                  <div className="flex items-center gap-1.5 bg-slate-900 border border-white/20 rounded-xl px-3 py-1.5">
-                    <span className="text-[11px] text-slate-300 font-bold">ساعات کاستوم:</span>
+                  <div className="flex items-center gap-1.5 bg-black border border-slate-700 rounded-xl px-3.5 py-2 shadow-sm">
+                    <span className="text-[11px] text-slate-100 font-bold">ساعات کاستوم:</span>
                     <input
                       type="number"
                       step="0.1"
@@ -667,11 +870,22 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                           setAutoConfig({ ...autoConfig, intervalHours: val });
                         }
                       }}
-                      className="w-16 text-xs font-black bg-transparent text-emerald-300 text-center focus:outline-none"
+                      className="w-16 text-xs font-black bg-transparent text-amber-300 text-center focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400">ساعت</span>
+                    <span className="text-[10px] text-slate-200 font-bold">ساعت</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Clear Schedule Example Card */}
+              <div className="p-4 bg-emerald-900/50 border-2 border-emerald-400/60 rounded-xl text-xs text-emerald-100 space-y-2 shadow-md">
+                <div className="flex items-center gap-1.5 font-black text-amber-300 text-xs">
+                  <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                  <span>💡 توضیح نحوه عملکرد دقیق این تنظیمات:</span>
+                </div>
+                <p className="text-[11px] text-emerald-100 leading-relaxed font-bold">
+                  اگر فاصله زمانی را روی <strong>{Number(customIntervalInput) < 1 ? `${Math.round(Number(customIntervalInput) * 60)} دقیقه` : `${customIntervalInput} ساعت`}</strong> و تعداد را روی <strong>{trendCount} پست</strong> قرار دهید؛ سیستم سر رأس هر <strong>{Number(customIntervalInput) < 1 ? `${Math.round(Number(customIntervalInput) * 60)} دقیقه` : `${customIntervalInput} ساعت`}</strong> یک‌بار، ابتدا سرچ زنده در توییتر/X و وب درباره «{trendTopic}» انجام داده و {combineIntoSinglePost && trendCount > 2 ? <strong>تمام {trendCount} ترند تازه همان لحظه را در ۱ پیام خلاصه‌شده‌ی واحد</strong> : <strong>تعداد {trendCount} پست تازه و داغ همان لحظه</strong>} را پیدا کرده و همزمان به کانال تلگرام ارسال می‌کند.
+                </p>
               </div>
 
               {/* Status & Save Button */}
@@ -705,7 +919,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                   <div className="max-h-24 overflow-y-auto space-y-1 p-2 bg-slate-900 rounded-xl border border-white/10 text-[11px]">
                     {autoConfig.logs.slice(0, 5).map((log, idx) => (
                       <div key={idx} className="flex items-center justify-between text-slate-300">
-                        <span className={log.status === 'success' ? 'text-emerald-300 font-bold' : 'text-rose-300 font-bold'}>
+                        <span className={log.status === 'success' ? 'text-emerald-300 font-bold' : 'text-white font-black bg-rose-900/90 px-2 py-0.5 rounded border border-rose-500'}>
                           {log.message}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono">
@@ -722,10 +936,35 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
             {/* Manual Results List */}
             {trendResults.length > 0 && (
               <div className="space-y-4 pt-2">
-                <h3 className="text-sm font-black text-white flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-amber-400" />
-                  <span>نتایج استخراج شده ترندهای X (قابل ویرایش و ارسال تک‌تک):</span>
-                </h3>
+                <div className="flex items-center justify-between flex-wrap gap-2 p-3 bg-purple-950/40 border border-purple-500/30 rounded-2xl">
+                  <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-400" />
+                    <span>نتایج استخراج شده ترندهای X (تعداد: {trendResults.length}):</span>
+                  </h3>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={scrollToTop}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                      <span>بازگشت به بالای پنل X</span>
+                    </button>
+
+                    {trendResults.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={handlePostAllCombined}
+                        disabled={isInstantPosting}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>⚡ ارسال یکجای تمام {trendResults.length} ترند در ۱ پیام خلاصه‌شده</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 {trendResults.map((item, idx) => (
                   <div key={item.id || idx} className="p-4 neu-flat bg-slate-900 border border-purple-500/30 rounded-2xl space-y-3">
@@ -750,12 +989,12 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                     </div>
 
                     {/* Point 2: High Contrast Readability Source Summary */}
-                    <div className="bg-slate-950/90 p-3.5 rounded-xl border border-amber-500/30 text-slate-100 space-y-1">
-                      <div className="flex items-center gap-1.5 text-amber-300 font-black text-xs mb-1">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <div className="bg-black p-3.5 rounded-xl border border-slate-700 space-y-2 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-white font-black text-xs">
+                        <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
                         <span>خلاصه منبع اصلی (کاور شده از X و وب):</span>
                       </div>
-                      <p className="text-xs font-sans text-slate-100 font-medium leading-relaxed bg-slate-900/80 p-2.5 rounded-lg border border-white/10">
+                      <p className="text-xs font-sans text-slate-100 font-bold leading-relaxed bg-slate-900 p-3 rounded-lg border border-slate-700">
                         {item.originalSummary}
                       </p>
                     </div>
@@ -793,6 +1032,18 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                     </div>
                   </div>
                 ))}
+
+                {/* Bottom Scroll-To-Top Button */}
+                <div className="pt-3 pb-1 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={scrollToTop}
+                    className="px-6 py-3 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-black font-black text-xs rounded-2xl shadow-xl transition-all flex items-center gap-2 cursor-pointer scale-105 hover:scale-110"
+                  >
+                    <ArrowUp className="w-4 h-4 text-black stroke-[3]" />
+                    <span>⬆️ بازگشت به ابتدای پنل X</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
