@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Radio, Send, Zap, ShieldCheck, User as UserIcon, LogOut, LogIn, UserPlus, Crown, Sun, Moon } from 'lucide-react';
+import { Bot, Radio, Send, Zap, ShieldCheck, User as UserIcon, LogOut, LogIn, UserPlus, Crown, Sun, Moon, Twitter, Sparkles } from 'lucide-react';
 import { User } from '../types';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   onOpenAdminPanel?: () => void;
   onOpenSubscriptions?: () => void;
   onOpenGlobalSupervisor?: () => void;
+  onOpenSocialWebImporter?: () => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
 }
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminPanel,
   onOpenSubscriptions,
   onOpenGlobalSupervisor,
+  onOpenSocialWebImporter,
   theme = 'dark',
   onToggleTheme,
 }) => {
@@ -82,6 +84,22 @@ export const Header: React.FC<HeaderProps> = ({
               <span>ربات ناظر</span>
             </button>
           )}
+
+          {/* Social/Web Importer & AI Trend Button */}
+          {onOpenSocialWebImporter && (
+            <button
+              onClick={onOpenSocialWebImporter}
+              className="neu-button px-3.5 py-2 text-xs font-black text-blue-300 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-400/50 hover:bg-blue-500/30 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-blue-500/15 cursor-pointer"
+              title="استخراج از X (توییتر) و وب + کاوشگر ترندهای داغ با AI"
+            >
+              <Twitter className="w-4 h-4 text-blue-400" />
+              <span>استخراج X & AI</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-400/20 text-blue-300 font-black border border-blue-400/30">
+                بتا
+              </span>
+            </button>
+          )}
+
 
           {/* Subscriptions Panel Button */}
           {onOpenSubscriptions && (

@@ -343,6 +343,107 @@ export async function importAdminBackup(token: string, backupData: any): Promise
   });
 }
 
+export async function extractSocialLink(payload: {
+  url: string;
+  translateToPersian?: boolean;
+  customPrompt?: string;
+  apiKey?: string;
+  provider?: string;
+  model?: string;
+  customBaseUrl?: string;
+}): Promise<{
+  ok: boolean;
+  extracted: {
+    type: string;
+    author?: string;
+    title?: string;
+    rawText: string;
+    telegramText: string;
+    mediaUrls: string[];
+    sourceUrl: string;
+  };
+}> {
+  return safeJsonFetch('/api/experimental/extract-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAiXTrends(payload: {
+  topic?: string;
+  count?: number;
+  apiKey?: string;
+  provider?: string;
+  model?: string;
+  customBaseUrl?: string;
+}): Promise<{
+  ok: boolean;
+  topic: string;
+  trends: Array<{
+    id: string;
+    title: string;
+    originalSummary: string;
+    telegramText: string;
+    hashtags: string[];
+    sourceUrl?: string;
+    mediaUrls?: string[];
+    topicCategory?: string;
+  }>;
+}> {
+  return safeJsonFetch('/api/experimental/ai-trends', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function postExperimentalToTelegram(payload: {
+  botToken: string;
+  targetChannel: string;
+  text: string;
+  mediaUrls?: string[];
+}): Promise<{ ok: boolean; messageId?: number; error?: string }> {
+  return safeJsonFetch('/api/experimental/post-now', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface AutoTrendConfig {
+  enabled: boolean;
+  connId?: string;
+  botToken: string;
+  targetChannel: string;
+  topic: string;
+  intervalHours: number;
+  countPerRun: number;
+  combineIntoSinglePost?: boolean;
+  apiKey?: string;
+  provider?: string;
+  model?: string;
+  customBaseUrl?: string;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  logs?: Array<{ time: string; status: 'success' | 'error'; message: string }>;
+}
+
+export async function getAutoTrendConfig(): Promise<{ ok: boolean; config: AutoTrendConfig }> {
+  return safeJsonFetch('/api/experimental/auto-trends', {
+    method: 'GET',
+  });
+}
+
+export async function saveAutoTrendConfig(payload: AutoTrendConfig): Promise<{ ok: boolean; config: AutoTrendConfig }> {
+  return safeJsonFetch('/api/experimental/auto-trends', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+
 
 
 

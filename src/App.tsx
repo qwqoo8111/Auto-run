@@ -10,6 +10,7 @@ import { AuthModal } from './components/AuthModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { SubscriptionsModal } from './components/SubscriptionsModal';
 import { GlobalSupervisorModal } from './components/GlobalSupervisorModal';
+import { SocialWebImporterModal } from './components/SocialWebImporterModal';
 import { TelegramConnection, CreateConnectionDTO, ConnectionStats, User } from './types';
 
 import { 
@@ -43,6 +44,7 @@ export default function App() {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isSubscriptionsOpen, setIsSubscriptionsOpen] = useState(false);
   const [isGlobalSupervisorOpen, setIsGlobalSupervisorOpen] = useState(false);
+  const [isSocialWebImporterOpen, setIsSocialWebImporterOpen] = useState(false);
 
   const authToken = localStorage.getItem('autorun_auth_token') || '';
 
@@ -272,6 +274,7 @@ export default function App() {
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
         onOpenGlobalSupervisor={() => setIsGlobalSupervisorOpen(true)}
+        onOpenSocialWebImporter={() => setIsSocialWebImporterOpen(true)}
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
@@ -396,6 +399,12 @@ export default function App() {
       <GlobalSupervisorModal
         isOpen={isGlobalSupervisorOpen}
         onClose={() => setIsGlobalSupervisorOpen(false)}
+        connections={connections}
+      />
+
+      <SocialWebImporterModal
+        isOpen={isSocialWebImporterOpen}
+        onClose={() => setIsSocialWebImporterOpen(false)}
         connections={connections}
       />
 

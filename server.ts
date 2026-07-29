@@ -131,6 +131,16 @@ function getHighResMediaUrl(rawUrl: string): string {
     url = url.replace(/([?&])size=[a-zA-Z0-9_-]+/gi, '$1size=u');
     url = url.replace(/\/size_[a-zA-Z0-9_-]+\//gi, '/size_u/');
   }
+
+  // Handle Twitter / X images high-res format
+  if (url.includes('pbs.twimg.com')) {
+    if (url.includes('name=')) {
+      url = url.replace(/name=[a-zA-Z0-9_]+/gi, 'name=orig');
+    } else {
+      url += (url.includes('?') ? '&' : '?') + 'name=orig';
+    }
+  }
+
   return url;
 }
 
@@ -191,12 +201,12 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
   if (provider === "openai" || provider === "deepseek" || provider === "custom_openai") {
     let baseUrl = "https://api.openai.com/v1";
     let defaultModel = "gpt-4o-mini";
-    let apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || process.env.OPENAI_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
+    let apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
 
     if (provider === "deepseek") {
       baseUrl = "https://api.deepseek.com";
       defaultModel = "deepseek-chat";
-      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || process.env.DEEPSEEK_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
+      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
     } else if (provider === "custom_openai") {
       baseUrl = (options.customBaseUrl?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
       defaultModel = "meta-llama/llama-3.3-70b-instruct";
@@ -207,7 +217,7 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
 
     if (!apiKey) {
       const pName = provider === "openai" ? "OpenAI" : provider === "deepseek" ? "DeepSeek" : "سرویس سفارشی";
-      throw new Error(`کلید API برای ${pName} وارد نشده است.`);
+      throw new Error(`کلید API اختصاصی برای ${pName} وارد نشده است. ورود کلید API توسط کاربر الزامی است.`);
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -240,11 +250,11 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
 
   // 2. Anthropic Claude
   if (provider === "claude") {
-    const apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || process.env.ANTHROPIC_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
+    const apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
     const modelName = options.model?.trim() || "claude-3-5-sonnet-latest";
 
     if (!apiKey) {
-      throw new Error("کلید API کلود (Anthropic) وارد نشده است.");
+      throw new Error("کلید API اختصاصی کلود (Anthropic) وارد نشده است.");
     }
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -274,11 +284,14 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
     return result;
   }
 
-  // 3. Google Gemini (Default)
-  const apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || process.env.GEMINI_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
+  // 3. Google Gemini
+  const apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
+  if (!apiKey) {
+    throw new Error("کلید API اختصاصی هوش مصنوعی Gemini وارد نشده است! لطفاً کلید Gemini خود را در تنظیمات وارد نمایید.");
+  }
   const ai = getGeminiClient(apiKey);
   if (!ai) {
-    throw new Error("کلید API هوش مصنوعی Gemini وارد نشده است! لطفاً کلید Gemini را در تنظیمات وارد کنید.");
+    throw new Error("کلید API هوش مصنوعی Gemini نامعتبر است یا با خطا مواجه شد.");
   }
 
   const normalizeGeminiModel = (m?: string): string => {
@@ -3229,6 +3242,715 @@ app.post("/api/connections/:id/clean-duplicates", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ error: `خطا در اسکن و پاکسازی پست‌های تکراری: ${err.message}` });
   }
+});
+
+// ==================== EXPERIMENTAL FEATURES: X/TWITTER & WEB IMPORTER + AI TREND HUNTER ====================
+
+// Helper to fetch live news RSS for trends fallback (targeting fresh 24h news)
+async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<Array<{ title: string; link: string; pubDate: string; snippet: string }>> {
+  try {
+    // Search Google News for recent items (when:1d forces news within last 24 hours)
+    let rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic + " when:1d")}&hl=fa&gl=IR&ceid=IR:fa`;
+    let res = await fetch(rssUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    });
+    
+    let xml = res.ok ? await res.text() : "";
+    let $ = cheerio.load(xml, { xmlMode: true });
+    let items: Array<{ title: string; link: string; pubDate: string; snippet: string }> = [];
+
+    $('item').each((i, el) => {
+      if (items.length < count) {
+        const title = $(el).find('title').text().trim();
+        const link = $(el).find('link').text().trim();
+        const pubDate = $(el).find('pubDate').text().trim();
+        const descHtml = $(el).find('description').text().trim();
+        const desc = cheerio.load(descHtml).text().replace(/<[^>]*>/g, '').trim();
+        if (title) {
+          items.push({
+            title: title.replace(/ - [^-]+$/, ''),
+            link,
+            pubDate,
+            snippet: desc || title,
+          });
+        }
+      }
+    });
+
+    // Fallback if 24h search returned fewer items
+    if (items.length < count) {
+      const fallbackUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic + " X twitter")}&hl=fa&gl=IR&ceid=IR:fa`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      });
+      if (fallbackRes.ok) {
+        const fallbackXml = await fallbackRes.text();
+        const $fallback = cheerio.load(fallbackXml, { xmlMode: true });
+        $fallback('item').each((i, el) => {
+          if (items.length < count) {
+            const title = $fallback(el).find('title').text().trim();
+            const link = $fallback(el).find('link').text().trim();
+            const pubDate = $fallback(el).find('pubDate').text().trim();
+            const descHtml = $fallback(el).find('description').text().trim();
+            const desc = cheerio.load(descHtml).text().replace(/<[^>]*>/g, '').trim();
+            if (title && !items.some(existing => existing.title === title)) {
+              items.push({
+                title: title.replace(/ - [^-]+$/, ''),
+                link,
+                pubDate,
+                snippet: desc || title,
+              });
+            }
+          }
+        });
+      }
+    }
+
+    return items;
+  } catch (err) {
+    console.warn("RSS fetch error:", err);
+    return [];
+  }
+}
+
+app.post("/api/experimental/extract-link", async (req, res) => {
+  try {
+    const { url, translateToPersian = true, customPrompt } = req.body || {};
+    if (!url || typeof url !== 'string' || !url.trim()) {
+      return res.status(400).json({ error: "لطفاً لینک مورد نظر را وارد نمایید." });
+    }
+
+    const targetUrl = url.trim();
+    const isTwitter = /x\.com|twitter\.com/i.test(targetUrl);
+
+    let rawText = "";
+    let authorOrTitle = "";
+    let mediaUrls: string[] = [];
+
+    if (isTwitter) {
+      const match = targetUrl.match(/\/(?:status|statuses)\/(\d+)/i);
+      const statusId = match ? match[1] : null;
+
+      if (statusId) {
+        // Try FxTwitter API first
+        try {
+          const fxRes = await fetch(`https://api.fxtwitter.com/status/${statusId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+          });
+          if (fxRes.ok) {
+            const fxJson = await fxRes.json();
+            if (fxJson && fxJson.tweet) {
+              const tweet = fxJson.tweet;
+              authorOrTitle = `@${tweet.author?.screen_name || ''} (${tweet.author?.name || ''})`;
+              rawText = tweet.text || "";
+
+              if (tweet.media) {
+                if (Array.isArray(tweet.media.photos)) {
+                  tweet.media.photos.forEach((p: any) => {
+                    const pUrl = p.url || p.media_url_https;
+                    if (pUrl && !mediaUrls.includes(pUrl)) mediaUrls.push(pUrl);
+                  });
+                }
+                if (Array.isArray(tweet.media.videos)) {
+                  tweet.media.videos.forEach((v: any) => {
+                    let vUrl = v.url;
+                    if (!vUrl && Array.isArray(v.variants)) {
+                      const mp4Variant = v.variants.find((varItem: any) => 
+                        varItem.content_type === "video/mp4" || varItem.url?.includes(".mp4")
+                      );
+                      if (mp4Variant) vUrl = mp4Variant.url;
+                    }
+                    if (vUrl && !mediaUrls.includes(vUrl)) {
+                      mediaUrls.push(vUrl);
+                    } else if (v.thumbnail_url && !mediaUrls.includes(v.thumbnail_url)) {
+                      mediaUrls.push(v.thumbnail_url);
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (fxErr) {
+          console.warn("FxTwitter fetch failed:", fxErr);
+        }
+
+        // Fallback to VxTwitter API if media or text missing
+        if (mediaUrls.length === 0 || !rawText) {
+          try {
+            const vxRes = await fetch(`https://api.vxtwitter.com/Twitter/status/${statusId}`, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            });
+            if (vxRes.ok) {
+              const vxJson = await vxRes.json();
+              if (vxJson) {
+                if (!rawText) rawText = vxJson.text || "";
+                if (!authorOrTitle && vxJson.user_screen_name) {
+                  authorOrTitle = `@${vxJson.user_screen_name} (${vxJson.user_name || ''})`;
+                }
+                if (Array.isArray(vxJson.media_extended)) {
+                  vxJson.media_extended.forEach((m: any) => {
+                    const mUrl = m.url || m.thumbnail_url;
+                    if (mUrl && !mediaUrls.includes(mUrl)) mediaUrls.push(mUrl);
+                  });
+                } else if (Array.isArray(vxJson.media_urls)) {
+                  vxJson.media_urls.forEach((mUrl: string) => {
+                    if (mUrl && !mediaUrls.includes(mUrl)) mediaUrls.push(mUrl);
+                  });
+                }
+              }
+            }
+          } catch (vxErr) {
+            console.warn("VxTwitter fetch failed:", vxErr);
+          }
+        }
+      }
+
+      if (!rawText) {
+        // Fallback to oEmbed
+        try {
+          const oembedRes = await fetch(`https://publish.twitter.com/oembed?url=${encodeURIComponent(targetUrl)}`);
+          if (oembedRes.ok) {
+            const oembedJson = await oembedRes.json();
+            authorOrTitle = oembedJson.author_name || "";
+            const $ = cheerio.load(oembedJson.html || "");
+            rawText = $("p").text() || oembedJson.html || "";
+          }
+        } catch (_) {}
+      }
+    } else {
+      // General Website Scraping
+      try {
+        const webRes = await fetch(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+        if (webRes.ok) {
+          const html = await webRes.text();
+          const $ = cheerio.load(html);
+
+          const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
+          const ogDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+          const ogImg = $('meta[property="og:image"]').attr('content');
+
+          authorOrTitle = ogTitle.trim();
+
+          const paragraphs = $('article p, main p, .content p, p')
+            .map((_, el) => $(el).text().trim())
+            .get()
+            .filter((p) => p.length > 20)
+            .slice(0, 5)
+            .join('\n\n');
+
+          rawText = paragraphs || ogDesc || ogTitle;
+
+          if (ogImg) {
+            const fullImg = ogImg.startsWith('http') ? ogImg : new URL(ogImg, targetUrl).href;
+            mediaUrls.push(fullImg);
+          }
+        }
+      } catch (webErr: any) {
+        return res.status(400).json({ error: `خطا در دریافت محتوای وب‌سایت: ${webErr.message}` });
+      }
+    }
+
+    if (!rawText) {
+      return res.status(400).json({ error: "محتوایی از لینک مورد نظر استخراج نشد. لطفاً از صحت لینک مطمئن شوید." });
+    }
+
+    // Default formatted output
+    let telegramText = `📰 **${authorOrTitle || 'خبر/توییت استخراج شده'}**\n\n${rawText}\n\n🔗 [مشاهده منبع اصلی](${targetUrl})`;
+
+    // Rewrite / Paraphrase using Gemini AI with fallback
+    if (translateToPersian || customPrompt) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: process.env.GEMINI_API_KEY,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
+          },
+        });
+
+        const promptText = `تو یک مدیر ارشد کانال‌های تلگرامی پرمخاطب هستی.
+این یک محتوا از منبع (${targetUrl}) است:
+${authorOrTitle ? 'عنوان/نویسنده منبع: ' + authorOrTitle : ''}
+متن خام محتوا:
+${rawText}
+
+دستورالعمل: ${customPrompt || "لطفاً این محتوا را به یک پست تلگرامی بسیار جذاب، خوانا، شکیل و روان به زبان فارسی تبدیل کن. از ایموجی‌های مناسب، لید خبری، لایه‌بندی پاراگرافی و هشتگ‌های مرتبط در پایان استفاده کن. در انتها عبارت منبع را قرار بده."}
+
+تنها متن نهایی پست تلگرام را بدون هیچ کلمه، توضیح یا علائم اضافه قبل و بعد برگردان.`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: promptText,
+        });
+
+        if (response.text && response.text.trim()) {
+          telegramText = response.text.trim();
+        }
+      } catch (aiErr: any) {
+        console.warn("Gemini translation fallback:", aiErr?.message || aiErr);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      extracted: {
+        type: isTwitter ? "twitter" : "website",
+        author: authorOrTitle,
+        rawText,
+        telegramText,
+        mediaUrls,
+        sourceUrl: targetUrl,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در پردازش لینک: ${err.message}` });
+  }
+});
+
+app.post("/api/experimental/ai-trends", async (req, res) => {
+  try {
+    const { topic = "اخبار فوری و ترندهای داغ جهان در X", count = 3, apiKey: userApiKey } = req.body || {};
+    const targetCount = Math.max(1, Math.min(Number(count) || 3, 30));
+
+    const apiKey = userApiKey?.trim().replace(/^["']|["']$/g, '') || "";
+    if (!apiKey) {
+      return res.status(400).json({ error: "وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. لطفاً کلید API خود را وارد کنید تا ترندهای X به‌روزرسانی شوند." });
+    }
+
+    // Step 1: Fetch live web news / X RSS snippets first to ensure real-time grounding
+    const rssItems = await fetchNewsRssForTopic(topic, targetCount + 2);
+
+    let trends: any[] = [];
+
+    // Step 2: Try Gemini AI structuring with user-provided API key
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      const todayDateStr = new Date().toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
+      const todayIsoStr = new Date().toISOString().split('T')[0];
+
+      const rssContext = rssItems.length > 0 
+        ? `اخبار و ترندهای زنده استخراج شده در ۲۴ ساعت گذشته (امروز):\n` + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nتاریخ خبر: ${r.pubDate || 'امروز'}\nلینک: ${r.link}`).join('\n---\n')
+        : "";
+
+      const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
+امروز: ${todayDateStr} (تاریخ میلادی: ${todayIsoStr})
+موضوع درخواست شده: "${topic}"
+
+${rssContext}
+
+تذکر بسیار مهم: حتماً فقط و فقط ترندها، اخبار و اتفاقات تازه مربوط به امروز یا ۲۴ ساعت گذشته را پردازش و ارائه کن. از اخبار قدیمی یا تاریخ گذشته استفاده نکن.
+تعداد ${targetCount} موضوع/توییت ترند برتر مرتبط با این موضوع را استخراج و به شکل پست تلگرامی جذاب آماده کن.
+پاسخ را فقط و فقط به شکل یک آرایه JSON معتبر با ساختار زیر ارسال کن (هیچ متن یا علامت توضیحی دیگری قبل یا بعد از JSON قرار نده):
+
+[
+  {
+    "id": "trend_1",
+    "title": "تیتر جذاب و کوتاه خبر/ترند تازه X (امروز)",
+    "originalSummary": "خلاصه اصل توییت یا خبر ترند شده همراه با حساب کاربری توییتر یا منبع",
+    "telegramText": "متن کامل آماده انتشار برای کانال تلگرام به زبان فارسی روان و جذاب همراه با ایموجی‌های عالی، فونت خوانا، لید خبری و هشتگ‌ها",
+    "hashtags": ["#توییتر", "#ترند"],
+    "sourceUrl": "لینک مستقیم توییت یا منبع خبر در وب",
+    "topicCategory": "دسته بندی موضوعی"
+  }
+]`;
+
+      let responseText = "";
+      for (const mName of ["gemini-3.6-flash", "gemini-flash-latest", "gemini-1.5-flash"]) {
+        try {
+          const res = await ai.models.generateContent({
+            model: mName,
+            contents: promptText,
+          });
+          if (res?.text) {
+            responseText = res.text;
+            break;
+          }
+        } catch (mErr) {
+          console.warn(`[AI-Trends] Model ${mName} failed, trying fallback...`, mErr);
+        }
+      }
+
+      let rawOutput = responseText;
+      rawOutput = rawOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+      try {
+        trends = JSON.parse(rawOutput);
+      } catch (_) {
+        const match = rawOutput.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        if (match) {
+          try {
+            trends = JSON.parse(match[0]);
+          } catch (__) {}
+        }
+      }
+    } catch (aiErr: any) {
+      console.warn("Gemini AI trends generation bypassed due to quota/error:", aiErr?.message || aiErr);
+    }
+
+    // Step 3: Fallback generator if Gemini returned empty or hit 429 quota limit
+    if (!Array.isArray(trends) || trends.length === 0) {
+      if (rssItems.length > 0) {
+        trends = rssItems.slice(0, targetCount).map((item, idx) => {
+          const cleanTag = topic.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+          return {
+            id: `trend_rss_${idx + 1}`,
+            title: item.title,
+            originalSummary: item.snippet || item.title,
+            telegramText: `🔥 **ترند داغ در X و وب:** ${item.title}\n\n📌 **موضوع:** ${topic}\n\n${item.snippet || item.title}\n\n🌐 **لینک منبع:** ${item.link}\n\n#توییتر #ترند_روز #${cleanTag}`,
+            hashtags: ["#توییتر", "#ترند", `#${cleanTag}`],
+            sourceUrl: item.link,
+            topicCategory: topic,
+          };
+        });
+      } else {
+        const cleanTag = topic.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+        trends = [
+          {
+            id: "trend_fallback_1",
+            title: `ترند داغ روز: ${topic}`,
+            originalSummary: `توییت‌ها و اخبار داغ حول محور ${topic} در شبکه اجتماعی X.`,
+            telegramText: `🔥 **ترند داغ شبکه اجتماعی X (توییتر)**\n\n📌 **موضوع:** ${topic}\n\nبحث‌ها و تحلیل‌های متعددی درباره ${topic} در توییتر فارسی و بین‌المللی شکل گرفته است.\n\n#توییتر #ترند_روز #${cleanTag}`,
+            hashtags: ["#توییتر", "#ترند"],
+            sourceUrl: "https://x.com/explore",
+            topicCategory: topic,
+          },
+        ];
+      }
+    }
+
+    return res.json({
+      ok: true,
+      topic,
+      trends,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در کاوش ترندهای X: ${err.message}` });
+  }
+});
+
+app.post("/api/experimental/post-now", async (req, res) => {
+  try {
+    const { botToken, targetChannel, text, mediaUrls } = req.body || {};
+
+    if (!botToken || !targetChannel || !text) {
+      return res.status(400).json({ error: "اطلاعات ناقص است (توکن ربات، کانال و متن الزامی می‌باشد)." });
+    }
+
+    let channel = targetChannel.trim();
+    if (!channel.startsWith('@') && !channel.startsWith('-') && isNaN(Number(channel))) {
+      channel = `@${channel}`;
+    }
+
+    let sendPayload: any;
+
+    if (Array.isArray(mediaUrls) && mediaUrls.length > 0) {
+      const validMedias = mediaUrls.filter((u: string) => typeof u === 'string' && u.trim().length > 0);
+      if (validMedias.length === 1) {
+        const mUrl = validMedias[0];
+        const isVideo = /\.mp4|\.mov|\.webm|video|ext_tw_video/i.test(mUrl);
+        sendPayload = {
+          method: isVideo ? "sendVideo" : "sendPhoto",
+          [isVideo ? "video" : "photo"]: mUrl,
+          caption: text,
+        };
+      } else if (validMedias.length > 1) {
+        sendPayload = {
+          method: "sendMediaGroup",
+          media: validMedias.map((m: string, idx: number) => {
+            const isVideo = /\.mp4|\.mov|\.webm|video|ext_tw_video/i.test(m);
+            return {
+              type: isVideo ? "video" : "photo",
+              media: m,
+              ...(idx === 0 ? { caption: text } : {}),
+            };
+          }),
+        };
+      } else {
+        sendPayload = {
+          method: "sendMessage",
+          text: text,
+        };
+      }
+    } else {
+      sendPayload = {
+        method: "sendMessage",
+        text: text,
+      };
+    }
+
+    const sendRes = await sendTelegramMessage(botToken, channel, sendPayload);
+
+    if (sendRes.ok) {
+      return res.json({ ok: true, messageId: sendRes.messageId, targetChannel: channel });
+    } else {
+      return res.status(400).json({ ok: false, error: sendRes.error || "خطا در ارسال پیام به تلگرام" });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در ارسال مستقیم به تلگرام: ${err.message}` });
+  }
+});
+
+// ==================== AUTO TREND POSTER SCHEDULER & WORKER ====================
+interface AutoTrendConfigData {
+  enabled: boolean;
+  connId?: string;
+  botToken: string;
+  targetChannel: string;
+  topic: string;
+  intervalHours: number;
+  countPerRun: number;
+  combineIntoSinglePost?: boolean;
+  apiKey?: string;
+  provider?: string;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  postedTrendTitles?: string[];
+  logs?: Array<{ time: string; status: 'success' | 'error'; message: string }>;
+}
+
+const AUTO_TREND_FILE = path.join(process.cwd(), 'auto_trend_settings.json');
+
+function loadAutoTrendConfig(): AutoTrendConfigData {
+  try {
+    if (fs.existsSync(AUTO_TREND_FILE)) {
+      const data = fs.readFileSync(AUTO_TREND_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.warn("Failed to load auto_trend_settings.json", err);
+  }
+  return {
+    enabled: false,
+    botToken: "",
+    targetChannel: "",
+    topic: "اخبار فوری و ترندهای داغ جهان در X",
+    intervalHours: 24,
+    countPerRun: 2,
+    lastRunAt: null,
+    nextRunAt: null,
+    postedTrendTitles: [],
+    logs: [],
+  };
+}
+
+function saveAutoTrendConfigData(config: AutoTrendConfigData) {
+  try {
+    fs.writeFileSync(AUTO_TREND_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (err) {
+    console.error("Failed to save auto_trend_settings.json", err);
+  }
+}
+
+let autoTrendConfig = loadAutoTrendConfig();
+
+async function runAutoTrendSchedulerWorker() {
+  if (!autoTrendConfig.enabled) return;
+  if (!autoTrendConfig.botToken || !autoTrendConfig.targetChannel) return;
+
+  const userApiKey = autoTrendConfig.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
+  if (!userApiKey) {
+    console.warn("[AutoTrendScheduler] کلید API اختصاصی هوش مصنوعی کاربر تنظیم نشده است. ارسال خودکار ترندها متوقف شد.");
+    const logEntry = {
+      time: new Date().toLocaleTimeString('fa-IR'),
+      status: 'error' as const,
+      message: 'خطا: کلید API اختصاصی هوش مصنوعی کاربر تنظیم نشده است. لطفاً کلید API خود را در بخش تنظیمات ترندها وارد نمایید.',
+    };
+    autoTrendConfig.logs = [logEntry, ...(autoTrendConfig.logs || [])].slice(0, 50);
+    saveAutoTrendConfigData(autoTrendConfig);
+    return;
+  }
+
+  const now = Date.now();
+  const lastRun = autoTrendConfig.lastRunAt ? new Date(autoTrendConfig.lastRunAt).getTime() : 0;
+  const intervalMs = (autoTrendConfig.intervalHours || 24) * 3600 * 1000;
+
+  if (now - lastRun < intervalMs) {
+    return; // Not time yet
+  }
+
+  console.log(`[AutoTrendScheduler] Running auto-trend poster for topic: "${autoTrendConfig.topic}"...`);
+
+  try {
+    const topic = autoTrendConfig.topic || "اخبار فوری و ترندهای داغ جهان در X";
+    const count = Math.max(1, Math.min(autoTrendConfig.countPerRun || 3, 30));
+    const rssItems = await fetchNewsRssForTopic(topic, count + 5);
+
+    let trends: any[] = [];
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: userApiKey,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+      });
+      const rssContext = rssItems.length > 0 
+        ? "اطلاعات زنده استخراج شده از وب:\n" + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nلینک: ${r.link}`).join('\n---\n')
+        : "";
+
+      const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
+موضوع درخواست شده: "${topic}"
+${rssContext}
+تعداد ${count} موضوع/توییت ترند برتر مرتبط با این موضوع را استخراج و به شکل پست تلگرامی جذاب آماده کن.
+پاسخ را فقط و فقط به شکل یک آرایه JSON معتبر با ساختار زیر ارسال کن (هیچ متن یا علامت توضیحی دیگری قبل یا بعد از JSON قرار نده):
+[
+  {
+    "id": "trend_1",
+    "title": "تیتر جذاب و کوتاه خبر/ترند X",
+    "originalSummary": "خلاصه اصل توییت یا خبر ترند شده همراه با حساب کاربری توییتر یا منبع",
+    "telegramText": "متن کامل آماده انتشار برای کانال تلگرام به زبان فارسی روان و جذاب همراه با ایموجی‌های عالی، فونت خوانا، لید خبری و هشتگ‌ها",
+    "hashtags": ["#توییتر", "#ترند"],
+    "sourceUrl": "لینک مستقیم توییت یا منبع خبر در وب",
+    "topicCategory": "دسته بندی موضوعی"
+  }
+]`;
+
+      let responseText = "";
+      for (const mName of ["gemini-3.6-flash", "gemini-flash-latest", "gemini-1.5-flash"]) {
+        try {
+          const res = await ai.models.generateContent({
+            model: mName,
+            contents: promptText,
+          });
+          if (res?.text) {
+            responseText = res.text;
+            break;
+          }
+        } catch (mErr) {}
+      }
+
+      let rawOutput = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      trends = JSON.parse(rawOutput);
+    } catch (e) {
+      if (rssItems.length > 0) {
+        const cleanTag = topic.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+        trends = rssItems.slice(0, count).map((item, idx) => ({
+          id: `auto_rss_${idx}`,
+          title: item.title,
+          originalSummary: item.snippet,
+          telegramText: `🔥 **ترند داغ در X و وب:** ${item.title}\n\n📌 **موضوع:** ${topic}\n\n${item.snippet || item.title}\n\n🌐 **لینک منبع:** ${item.link}\n\n#توییتر #ترند_روز #${cleanTag}`,
+          sourceUrl: item.link,
+        }));
+      }
+    }
+
+    if (Array.isArray(trends) && trends.length > 0) {
+      let postedCount = 0;
+      let targetChannel = autoTrendConfig.targetChannel.trim();
+      if (!targetChannel.startsWith('@') && !targetChannel.startsWith('-') && isNaN(Number(targetChannel))) {
+        targetChannel = `@${targetChannel}`;
+      }
+
+      const history = autoTrendConfig.postedTrendTitles || [];
+
+      if (autoTrendConfig.combineIntoSinglePost && trends.length > 1) {
+        // Consolidate into 1 post
+        const cleanTag = topic.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
+        const header = `🔥 **خلاصه و جمع‌بندی داغ‌ترین ترندها (${trends.length} موضوع در ۱ پیام):**\n\n`;
+        const itemsText = trends.slice(0, count).map((item, idx) => {
+          const tTitle = item.title || `موضوع ${idx + 1}`;
+          const tSummary = item.originalSummary || item.telegramText || '';
+          return `🔹 **${idx + 1}. ${tTitle}**\n${tSummary}`;
+        }).join('\n\n---\n\n');
+
+        const combinedText = `${header}📌 **موضوع:** ${topic}\n\n${itemsText}\n\n⚡ **ارسال شده توسط کاوشگر زنده X و وب** | #${cleanTag} #خلاصه_اخبار`;
+
+        const sendRes = await sendTelegramMessage(autoTrendConfig.botToken, targetChannel, {
+          method: "sendMessage",
+          text: combinedText,
+        });
+
+        if (sendRes.ok) {
+          postedCount = trends.length;
+          for (const item of trends.slice(0, count)) {
+            if (item.title) history.push(item.title);
+          }
+          if (history.length > 100) history.splice(0, history.length - 100);
+        }
+      } else {
+        // N separate posts
+        for (const item of trends.slice(0, count)) {
+          if (!item.telegramText) continue;
+          if (history.includes(item.title)) continue;
+
+          const sendRes = await sendTelegramMessage(autoTrendConfig.botToken, targetChannel, {
+            method: "sendMessage",
+            text: item.telegramText,
+          });
+
+          if (sendRes.ok) {
+            postedCount++;
+            history.push(item.title);
+            if (history.length > 100) history.shift();
+          }
+        }
+      }
+
+      autoTrendConfig.postedTrendTitles = history;
+      autoTrendConfig.lastRunAt = new Date().toISOString();
+      autoTrendConfig.nextRunAt = new Date(Date.now() + intervalMs).toISOString();
+
+      const logMsg = autoTrendConfig.combineIntoSinglePost
+        ? `تعداد ${trends.length} ترند به صورت ۱ پیام خلاصه به کانال ${targetChannel} ارسال شد.`
+        : `تعداد ${postedCount} ترند به کانال ${targetChannel} با موفقیت ارسال شد.`;
+      autoTrendConfig.logs = [
+        { time: new Date().toISOString(), status: 'success', message: logMsg },
+        ...(autoTrendConfig.logs || []).slice(0, 19)
+      ];
+      saveAutoTrendConfigData(autoTrendConfig);
+    }
+  } catch (err: any) {
+    console.error("[AutoTrendScheduler] Worker error:", err);
+    autoTrendConfig.logs = [
+      { time: new Date().toISOString(), status: 'error', message: `خطا در ارسال خودکار: ${err.message}` },
+      ...(autoTrendConfig.logs || []).slice(0, 19)
+    ];
+    saveAutoTrendConfigData(autoTrendConfig);
+  }
+}
+
+// Background poll every 60 seconds
+setInterval(runAutoTrendSchedulerWorker, 60000);
+
+app.get("/api/experimental/auto-trends", (req, res) => {
+  res.json({ ok: true, config: autoTrendConfig });
+});
+
+app.post("/api/experimental/auto-trends", (req, res) => {
+  const { enabled, connId, botToken, targetChannel, topic, intervalHours, countPerRun, combineIntoSinglePost } = req.body || {};
+  const isEnabled = Boolean(enabled);
+  const interval = Math.max(0.05, Number(intervalHours) || 24);
+  const count = Math.max(1, Math.min(Number(countPerRun) || 3, 30));
+
+  autoTrendConfig = {
+    ...autoTrendConfig,
+    enabled: isEnabled,
+    connId: connId || autoTrendConfig.connId,
+    botToken: (botToken || autoTrendConfig.botToken || "").trim(),
+    targetChannel: (targetChannel || autoTrendConfig.targetChannel || "").trim(),
+    topic: (topic || autoTrendConfig.topic || "اخبار فوری و ترندهای داغ جهان در X").trim(),
+    intervalHours: interval,
+    countPerRun: count,
+    combineIntoSinglePost: Boolean(combineIntoSinglePost),
+    nextRunAt: isEnabled ? new Date(Date.now() + Math.round(interval * 3600 * 1000)).toISOString() : null,
+  };
+  saveAutoTrendConfigData(autoTrendConfig);
+
+  if (isEnabled) {
+    runAutoTrendSchedulerWorker().catch(console.error);
+  }
+
+  res.json({ ok: true, config: autoTrendConfig });
 });
 
 // In-memory OTP store for email verification
