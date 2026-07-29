@@ -1873,6 +1873,8 @@ async function fetchWithRetry(url: string, attempts = 2): Promise<Response> {
   throw lastErr || new Error("پاسخی از وب‌سایت تلگرام دریافت نشد");
 }
 
+const TELEGRAM_EXCLUDE_MEDIA_CONTAINERS = ".js-message_text, .tgme_widget_message_text, .emoji, tg-emoji, .tgme_widget_message_user_photo, .tgme_widget_message_author_photo, .tgme_widget_message_author, .tgme_widget_message_forwarded_from, .tgme_widget_message_reply, .tgme_widget_message_reply_wrap, .tgme_widget_message_reply_photo, .tgme_widget_message_reply_thumb, .tgme_widget_message_reply_video, a.tgme_widget_message_reply, .tgme_widget_message_quoted, .tgme_widget_message_quote, .tgme_widget_message_link_preview, .tgme_widget_message_link_preview_image, .tgme_widget_message_link_preview_thumb, a.tgme_widget_message_link_preview, .tgme_widget_message_location";
+
 async function fetchHighResEmbedMedia(cleanChannel: string, msgId: number): Promise<{ photos: string[] }> {
   try {
     const embedUrl = `https://t.me/${cleanChannel}/${msgId}?embed=1`;
@@ -1883,19 +1885,10 @@ async function fetchHighResEmbedMedia(cleanChannel: string, msgId: number): Prom
     const $ = cheerio.load(html);
     const photos: string[] = [];
 
-    // 1. Check og:image meta tag (full resolution photo)
-    const ogImage = $("meta[property='og:image']").attr("content");
-    if (ogImage) {
-      const cleaned = cleanMediaUrl(ogImage);
-      if (cleaned && isMediaUrlValidAndNotEmoji(cleaned)) {
-        photos.push(cleaned);
-      }
-    }
-
-    // 2. Check embed page photo elements
+    // Check embed page photo elements (excluding replies, quotes, link previews, avatars)
     $(".tgme_widget_message_photo_wrap, .tgme_widget_message_photo, a.tgme_widget_message_photo_wrap, .tgme_widget_message_grouped_layer_item, .tgme_widget_message_grouped_item").each((_, photoEl) => {
       const $p = $(photoEl);
-      if ($p.closest(".js-message_text, .tgme_widget_message_text, .emoji, tg-emoji, .tgme_widget_message_user_photo, .tgme_widget_message_author_photo").length > 0) {
+      if ($p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS).length > 0) {
         return;
       }
       const style = $p.attr("style") || "";
@@ -1914,6 +1907,17 @@ async function fetchHighResEmbedMedia(cleanChannel: string, msgId: number): Prom
         }
       }
     });
+
+    // Check og:image meta tag only if no photos found directly in the message body
+    if (photos.length === 0) {
+      const ogImage = $("meta[property='og:image']").attr("content");
+      if (ogImage) {
+        const cleaned = cleanMediaUrl(ogImage);
+        if (cleaned && isMediaUrlValidAndNotEmoji(cleaned)) {
+          photos.push(cleaned);
+        }
+      }
+    }
 
     return { photos };
   } catch (err) {
@@ -1993,11 +1997,11 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       
       const mediaItems: { type: 'photo' | 'video'; url: string }[] = [];
 
-      // Extract Photos: Search ONLY in photo wrappers outside text and video wrappers
+      // Extract Photos: Search ONLY in photo wrappers outside text, replies, quote boxes, link previews, and video wrappers
       $post.find(".tgme_widget_message_photo_wrap, .tgme_widget_message_photo, a.tgme_widget_message_photo_wrap, .tgme_widget_message_grouped_layer_item, .tgme_widget_message_grouped_item").each((_, photoEl) => {
         const $p = $(photoEl);
-        // Exclude elements inside message text, author/user avatar wrappers, OR video wrappers/containers
-        if ($p.closest(".js-message_text, .tgme_widget_message_text, .emoji, tg-emoji, .tgme_widget_message_user_photo, .tgme_widget_message_author_photo, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player").length > 0) {
+        // Exclude elements inside message text, author/user avatars, replies, quotes, link previews, OR video wrappers/containers
+        if ($p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS + ", .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player").length > 0) {
           return;
         }
         // If this element contains a video tag or video player inside, skip photo extraction (video poster frame)
@@ -2022,10 +2026,10 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
         }
       });
 
-      // Extract Videos: Search ONLY in video tags/wrappers outside text
+      // Extract Videos: Search ONLY in video tags/wrappers outside text, replies, quotes, link previews
       $post.find("video.tgme_widget_message_video, .tgme_widget_message_video_player video, .tgme_widget_message_video_wrap video, a.tgme_widget_message_video_player").each((_, videoEl) => {
         const $v = $(videoEl);
-        if ($v.closest(".js-message_text, .tgme_widget_message_text, .emoji, tg-emoji").length > 0) {
+        if ($v.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS).length > 0) {
           return;
         }
 
