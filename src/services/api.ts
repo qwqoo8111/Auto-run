@@ -347,10 +347,6 @@ export async function extractSocialLink(payload: {
   url: string;
   translateToPersian?: boolean;
   customPrompt?: string;
-  apiKey?: string;
-  provider?: string;
-  model?: string;
-  customBaseUrl?: string;
 }): Promise<{
   ok: boolean;
   extracted: {
@@ -373,10 +369,6 @@ export async function extractSocialLink(payload: {
 export async function fetchAiXTrends(payload: {
   topic?: string;
   count?: number;
-  apiKey?: string;
-  provider?: string;
-  model?: string;
-  customBaseUrl?: string;
 }): Promise<{
   ok: boolean;
   topic: string;
@@ -387,7 +379,6 @@ export async function fetchAiXTrends(payload: {
     telegramText: string;
     hashtags: string[];
     sourceUrl?: string;
-    mediaUrls?: string[];
     topicCategory?: string;
   }>;
 }> {
@@ -419,11 +410,6 @@ export interface AutoTrendConfig {
   topic: string;
   intervalHours: number;
   countPerRun: number;
-  combineIntoSinglePost?: boolean;
-  apiKey?: string;
-  provider?: string;
-  model?: string;
-  customBaseUrl?: string;
   lastRunAt?: string | null;
   nextRunAt?: string | null;
   logs?: Array<{ time: string; status: 'success' | 'error'; message: string }>;

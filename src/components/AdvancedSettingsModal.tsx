@@ -28,11 +28,11 @@ const PROVIDERS: {
   {
     id: 'gemini',
     name: 'Google Gemini',
-    badge: 'Google Gemini (کلید اختصاصی)',
+    badge: 'پیش‌فرض / رایگان',
     icon: '🤖',
     color: 'border-purple-500/30 text-purple-300 bg-purple-950/20',
     keyLink: 'https://aistudio.google.com/app/apikey',
-    keyTip: 'کلید API اختصاصی از گوگل AI Studio (با جیمیل)',
+    keyTip: 'کلید رایگان از گوگل AI Studio (با جیمیل)',
     models: [
       { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (پیشنهادی - هوشمند و سریع)' },
       { id: 'gemini-flash-latest', label: 'Gemini Flash Latest (آخرین نسخه فلاش)' },
@@ -211,12 +211,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     setAiTestResult(null);
     setAiTestError(null);
 
-    if (!aiApiKey.trim()) {
-      setAiTestError('وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. کلید پیش‌فرض سیستم حذف گردیده است.');
-      setTestingAi(false);
-      return;
-    }
-
     const activeModel = aiModel === 'custom' ? customModelInput.trim() : aiModel;
 
     try {
@@ -382,13 +376,6 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const handleSave = async () => {
     setSaving(true);
     setSavedSuccess(false);
-
-    if (rewriteMode === 'ai' && !aiApiKey.trim()) {
-      alert('وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. جهت استفاده از بازنویسی با هوش مصنوعی، لطفاً کلید API خود را وارد کنید.');
-      setSaving(false);
-      return;
-    }
-
     try {
       const activeModel = aiModel === 'custom' ? customModelInput.trim() : aiModel;
       const newSettings: AdvancedSettings = {
@@ -612,9 +599,13 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-purple-200 flex items-center gap-1">
                       <Key className="w-3.5 h-3.5 text-purple-400" />
-                      <span>کلید API Key اختصاصی کاربر ({currentProviderConfig.name}):</span>
-                      <span className="text-rose-400 font-bold">* (الزامی)</span>
+                      <span>کلید API Key ({currentProviderConfig.name}):</span>
                     </label>
+                    {aiProvider === 'gemini' && (
+                      <span className="text-[10px] text-yellow-400 font-semibold">
+                        (در صورت خالی بودن از کلید پیش‌فرض سرور استفاده می‌شود)
+                      </span>
+                    )}
                   </div>
                   <input
                     type="password"
@@ -622,26 +613,26 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     onChange={(e) => setAiApiKey(e.target.value)}
                     placeholder={
                       aiProvider === 'gemini'
-                        ? 'AIzaSy... (کلید اختصاصی Gemini)'
+                        ? 'AIzaSy... (اختیاری برای Gemini)'
                         : aiProvider === 'openai'
-                        ? 'sk-proj-... (کلید اختصاصی OpenAI)'
+                        ? 'sk-proj-... (کلید OpenAI)'
                         : aiProvider === 'deepseek'
-                        ? 'sk-... (کلید اختصاصی DeepSeek)'
+                        ? 'sk-... (کلید DeepSeek)'
                         : aiProvider === 'claude'
-                        ? 'sk-ant-api03-... (کلید اختصاصی Claude)'
-                        : 'کلید API اختصاصی سرویس مورد نظر'
+                        ? 'sk-ant-api03-... (کلید Claude)'
+                        : 'کلید API سرویس مورد نظر'
                     }
                     className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 font-mono dir-ltr text-right"
                   />
                   <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                    💡 <span className="text-purple-300">راهنما:</span> هر کاربر باید کلید API خود را وارد کند ➔
+                    💡 <span className="text-purple-300">راهنما:</span> {currentProviderConfig.keyTip} ➔
                     <a
                       href={currentProviderConfig.keyLink}
                       target="_blank"
                       rel="noreferrer"
                       className="text-yellow-400 underline hover:text-yellow-300 font-bold"
                     >
-                      دریافت کلید API ({currentProviderConfig.keyTip})
+                      دریافت کلید API
                     </a>
                   </p>
                 </div>
