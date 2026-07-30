@@ -28,6 +28,12 @@ export interface AdvancedSettings {
   baleTargetChannel?: string;
   baleBotToken?: string;
   baleReplaceId?: string;
+  // X (Twitter) & Web Integration
+  enableX?: boolean;
+  xTargetHandles?: string;
+  xApiKey?: string;
+  enableWeb?: boolean;
+  webTargetUrl?: string;
   preventDuplicates?: boolean;
   duplicateSimilarityThreshold?: number;
   duplicateAction?: 'skip' | 'delete_existing';
@@ -61,10 +67,16 @@ export interface TelegramConnection {
   lastError: string | null;
   botName?: string;
   sourceTitle?: string;
+  sourceType?: 'telegram' | 'twitter' | 'website' | 'auto_x_trends';
   enableBale?: boolean;
   baleTargetChannel?: string;
   baleBotToken?: string;
   baleReplaceId?: string;
+  enableX?: boolean;
+  xTargetHandles?: string;
+  xApiKey?: string;
+  enableWeb?: boolean;
+  webTargetUrl?: string;
   settings?: AdvancedSettings;
 }
 
@@ -97,10 +109,16 @@ export interface CreateConnectionDTO {
   sourceChannel: string;
   targetChannel: string;
   botToken: string;
+  sourceType?: 'telegram' | 'twitter' | 'website' | 'auto_x_trends';
   enableBale?: boolean;
   baleTargetChannel?: string;
   baleBotToken?: string;
   baleReplaceId?: string;
+  enableX?: boolean;
+  xTargetHandles?: string;
+  xApiKey?: string;
+  enableWeb?: boolean;
+  webTargetUrl?: string;
   settings?: AdvancedSettings;
 }
 

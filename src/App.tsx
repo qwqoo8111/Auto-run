@@ -406,6 +406,7 @@ export default function App() {
         isOpen={isSocialWebImporterOpen}
         onClose={() => setIsSocialWebImporterOpen(false)}
         connections={connections}
+        onCreateConnection={handleCreateConnection}
       />
 
     </div>

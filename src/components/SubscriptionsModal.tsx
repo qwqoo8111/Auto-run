@@ -179,24 +179,24 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl neu-flat border border-white/10 text-slate-100 flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl bg-slate-950 border border-slate-800 text-slate-100 flex flex-col shadow-2xl dir-rtl">
         
         {/* Top Header Bar */}
-        <div className="flex items-center justify-between p-5 border-b border-white/10 bg-slate-950/40">
+        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/80">
           <div className="flex items-center gap-3">
-            <div className="p-3 neu-inset rounded-2xl text-amber-400 bg-amber-500/10 border border-amber-500/20">
+            <div className="p-3 rounded-2xl text-amber-400 bg-amber-500/10 border border-amber-500/20">
               <Crown className="w-6 h-6 animate-bounce" />
             </div>
             <div>
               <h2 className="text-xl font-black text-white tracking-wide">تعرفه‌ها و پلن‌های اشتراک</h2>
-              <p className="text-xs text-slate-400 mt-0.5">ارتقای سطح کاربری برای دسترسی به هوش مصنوعی و کانال‌های بیشتر</p>
+              <p className="text-xs text-slate-300 mt-0.5">ارتقای سطح کاربری برای دسترسی به هوش مصنوعی و کانال‌های بیشتر</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2.5 rounded-xl neu-button text-slate-400 hover:text-white transition-all cursor-pointer"
+            className="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer border border-slate-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -206,24 +206,24 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
         {noticeMsg && (
           <div className={`mx-6 mt-4 p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 ${
             noticeMsg.type === 'success' 
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' 
-              : 'bg-red-500/15 border-red-500/40 text-red-300'
+              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' 
+              : 'bg-red-500/20 border-red-500/40 text-red-300'
           }`}>
             <div className="flex items-center gap-2">
-              {noticeMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-              <span>{noticeMsg.text}</span>
+              {noticeMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+              <span className="leading-relaxed">{noticeMsg.text}</span>
             </div>
-            <button onClick={() => setNoticeMsg(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+            <button onClick={() => setNoticeMsg(null)} className="text-xs opacity-70 hover:opacity-100 p-1">✕</button>
           </div>
         )}
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 px-6 pt-4 border-b border-white/10 bg-slate-900/30">
+        <div className="flex items-center gap-2 px-6 pt-4 border-b border-slate-800 bg-slate-900">
           <button
             onClick={() => { setActiveTab('plans'); setIsCheckoutOpen(false); }}
             className={`px-4 py-2.5 rounded-t-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'plans' && !isCheckoutOpen
-                ? 'bg-yellow-400/10 text-yellow-400 border-t border-x border-yellow-400/30'
+                ? 'bg-amber-500/20 text-amber-300 border-t border-x border-amber-500/40'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -235,14 +235,14 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
             onClick={() => { setActiveTab('my_subscription'); setIsCheckoutOpen(false); }}
             className={`px-4 py-2.5 rounded-t-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'my_subscription'
-                ? 'bg-yellow-400/10 text-yellow-400 border-t border-x border-yellow-400/30'
+                ? 'bg-amber-500/20 text-amber-300 border-t border-x border-amber-500/40'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Crown className="w-4 h-4" />
             <span>اشتراک فعال من</span>
             {currentUser && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 font-bold border border-amber-500/40">
                 {currentUser.role === 'admin' ? 'دسترسی طلایی' : (currentUser.plan?.toUpperCase() || 'FREE')}
               </span>
             )}
@@ -252,7 +252,7 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
             onClick={() => { setActiveTab('redeem'); setIsCheckoutOpen(false); }}
             className={`px-4 py-2.5 rounded-t-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'redeem'
-                ? 'bg-yellow-400/10 text-yellow-400 border-t border-x border-yellow-400/30'
+                ? 'bg-amber-500/20 text-amber-300 border-t border-x border-amber-500/40'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -262,7 +262,7 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
         </div>
 
         {/* Main Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-950">
 
           {/* TAB 1: PLANS SHOWCASE & CHECKOUT */}
           {activeTab === 'plans' && !isCheckoutOpen && (
@@ -279,13 +279,13 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
               )}
               
               {/* Billing Cycle Selector */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl neu-inset bg-slate-950/40 border border-white/5">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900 border border-slate-800">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-200">دوره تمدید و فاکتور:</h4>
-                  <p className="text-[11px] text-slate-400">با انتخاب دوره‌های طولانی‌تر تا ۴۰٪ تخفیف دریافت کنید.</p>
+                  <h4 className="text-xs font-black text-white">دوره تمدید و فاکتور:</h4>
+                  <p className="text-[11px] text-slate-300 mt-0.5">با انتخاب دوره‌های طولانی‌تر تا ۴۰٪ تخفیف ویژه دریافت کنید.</p>
                 </div>
 
-                <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-white/10 text-xs font-bold">
+                <div className="flex items-center gap-2 p-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
                   {[
                     { months: 1, label: '۱ ماهه', discount: null },
                     { months: 3, label: '۳ ماهه', discount: '۱۵٪-' },
@@ -295,18 +295,18 @@ export const SubscriptionsModal: React.FC<SubscriptionsModalProps> = ({
                     <button
                       key={cycle.months}
                       onClick={() => setBillingCycle(cycle.months)}
-                      className={`relative px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      className={`relative px-3.5 py-2 rounded-lg transition-all cursor-pointer font-bold text-xs flex items-center gap-1.5 ${
                         billingCycle === cycle.months
-                          ? 'bg-slate-800 text-amber-300 border border-amber-500/40 shadow-sm font-bold'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md border border-amber-400'
+                          : 'bg-slate-900 text-slate-200 hover:text-white hover:bg-slate-800 border border-slate-800'
                       }`}
                     >
-                      {cycle.label}
+                      <span>{cycle.label}</span>
                       {cycle.discount && (
-                        <span className={`mr-1 text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${
                           billingCycle === cycle.months 
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                            : 'bg-slate-800/80 text-slate-400 border border-slate-700/60'
+                            ? 'bg-slate-950 text-amber-300 border border-amber-400' 
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         }`}>
                           {cycle.discount}
                         </span>

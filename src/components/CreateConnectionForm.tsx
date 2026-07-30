@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Loader2, AlertCircle, Sparkles, Bot, CheckCircle2, Lock, Crown } from 'lucide-react';
+import { Send, Loader2, AlertCircle, Bot, CheckCircle2, Crown } from 'lucide-react';
 import { CreateConnectionDTO, User } from '../types';
 import { testBaleBot } from '../services/api';
 
@@ -55,11 +55,11 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
     setError(null);
 
     if (!sourceChannel.trim()) {
-      setError('لطفاً فیلد کانال مبدأ را وارد کنید.');
+      setError('لطفاً فیلد کانال مبدأ تلگرام را وارد کنید.');
       return;
     }
     if (!targetChannel.trim()) {
-      setError('لطفاً فیلد کانال مقصد را وارد کنید.');
+      setError('لطفاً فیلد کانال مقصد تلگرام را وارد کنید.');
       return;
     }
     if (!botToken.trim()) {
@@ -80,6 +80,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
 
     try {
       await onSubmit({
+        sourceType: 'telegram',
         sourceChannel: sourceChannel.trim(),
         targetChannel: targetChannel.trim(),
         botToken: botToken.trim(),
@@ -120,13 +121,13 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
             </div>
           )}
 
-          {/* 3 Required Telegram Fields */}
+          {/* 3 Main Connection Fields */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             
             {/* Field 1: Source Channel */}
             <div className="space-y-2">
               <label className="block text-sm font-bold text-white pr-1">
-                کانال مبدأ (تلگرام)
+                کانال مبدأ (تلگرام) ✈️
               </label>
               <div className="neu-inset p-1 flex items-center">
                 <input

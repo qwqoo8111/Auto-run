@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { 
   X, Plus, Trash2, Save, Sliders, Sparkles, CheckCircle2, RefreshCw, 
   Eye, Replace, FileText, Filter, Bot, ShieldCheck, Tag, Link2, Globe, Cpu, Key, Lock, Crown,
-  CopyCheck, ShieldAlert, Activity
+  CopyCheck, ShieldAlert, Activity, Twitter
 } from 'lucide-react';
 import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User } from '../types';
 import { updateConnectionSettings, testAiApi, testBaleBot, cleanDuplicates } from '../services/api';
@@ -142,6 +142,13 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [testingBale, setTestingBale] = useState<boolean>(false);
   const [baleStatusMsg, setBaleStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // X (Twitter) & Website Integration State
+  const [enableX, setEnableX] = useState<boolean>(false);
+  const [xTargetHandles, setXTargetHandles] = useState<string>('');
+  const [xApiKey, setXApiKey] = useState<string>('');
+  const [enableWeb, setEnableWeb] = useState<boolean>(false);
+  const [webTargetUrl, setWebTargetUrl] = useState<string>('');
+
   // Duplicate Protection State
   const [preventDuplicates, setPreventDuplicates] = useState<boolean>(true);
   const [duplicateSimilarityThreshold, setDuplicateSimilarityThreshold] = useState<number>(80);
@@ -188,6 +195,12 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setBaleBotToken(s.baleBotToken || connection.baleBotToken || '');
       setBaleReplaceId(s.baleReplaceId || connection.baleReplaceId || '');
 
+      setEnableX(!!s.enableX || !!connection.enableX);
+      setXTargetHandles(s.xTargetHandles || connection.xTargetHandles || '');
+      setXApiKey(s.xApiKey || connection.xApiKey || '');
+      setEnableWeb(!!s.enableWeb || !!connection.enableWeb);
+      setWebTargetUrl(s.webTargetUrl || connection.webTargetUrl || '');
+
       setSampleText(
         `پست جدید در کانال ${connection.sourceChannel}\nبرای خرید و ثبت سفارش به آیدی ${connection.sourceChannel} پیام دهید.\nلینک کانال: https://t.me/${connection.sourceChannel.replace('@', '')}\n#فروشگاه #تخفیف`
       );
@@ -195,6 +208,9 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   }, [connection]);
 
   if (!connection) return null;
+
+  const isTwitterSource = connection?.sourceType === 'twitter' || connection?.sourceChannel?.toLowerCase().includes('twitter.com') || connection?.sourceChannel?.toLowerCase().includes('x.com');
+  const isWebsiteSource = connection?.sourceType === 'website' || connection?.sourceChannel?.toLowerCase().includes('http');
 
   const currentProviderConfig = PROVIDERS.find((p) => p.id === aiProvider) || PROVIDERS[0];
 
@@ -408,6 +424,11 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         baleTargetChannel: baleTargetChannel.trim(),
         baleBotToken: baleBotToken.trim(),
         baleReplaceId: baleReplaceId.trim(),
+        enableX,
+        xTargetHandles: xTargetHandles.trim(),
+        xApiKey: xApiKey.trim(),
+        enableWeb,
+        webTargetUrl: webTargetUrl.trim(),
         preventDuplicates,
         duplicateSimilarityThreshold,
         duplicateAction,
@@ -428,17 +449,25 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-4">
-      <div className="neu-flat w-full max-w-4xl max-h-[92vh] flex flex-col border border-white/10 overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6">
+      <div className="neu-flat w-full max-w-5xl lg:max-w-6xl max-h-[92vh] flex flex-col border border-white/10 overflow-hidden shadow-2xl rounded-2xl">
         
         {/* Modal Header */}
-        <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/20">
+        <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/30">
           <div className="flex items-center gap-3">
             <div className="p-2.5 neu-inset rounded-xl text-yellow-400">
-              <Sliders className="w-5 h-5" />
+              {isTwitterSource ? <Twitter className="w-5 h-5 text-sky-400" /> : isWebsiteSource ? <Globe className="w-5 h-5 text-purple-400" /> : <Sliders className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-base font-black text-white">تنظیمات پیشرفته و فیلترهای هوشمند</h3>
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                {isTwitterSource ? (
+                  <span>تنظیمات پیشرفته اختصاصی توییتر (X) & هوش مصنوعی</span>
+                ) : isWebsiteSource ? (
+                  <span>تنظیمات پیشرفته اختصاصی وب‌سایت (RSS) & هوش مصنوعی</span>
+                ) : (
+                  <span>تنظیمات پیشرفته و فیلترهای هوشمند</span>
+                )}
+              </h3>
               <p className="text-xs text-slate-400 mt-0.5 dir-ltr text-right">
                 {connection.sourceChannel} ➔ {connection.targetChannel}
               </p>
@@ -805,195 +834,197 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Section 3.5: Duplicate Detection & Prevention (تشخیص و پاکسازی پست‌های تکراری) */}
-          <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
-              <div className="flex items-center gap-2">
-                <CopyCheck className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص و جلوگیـری از پست‌های تکراری</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    الگوریتم هوشمند سنجش شباهت محتوا و پاکسازی اتوماتیک پست‌های تکراری در کانال مقصد
-                  </p>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
-                <input
-                  type="checkbox"
-                  checked={preventDuplicates}
-                  onChange={(e) => setPreventDuplicates(e.target.checked)}
-                  className="w-4 h-4 accent-amber-400 rounded"
-                />
-                <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
-              </label>
-            </div>
-
-            {preventDuplicates && (
-              <div className="space-y-4 animate-fadeIn pt-1">
-                {/* Threshold Selection */}
-                <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                      <span>۱. درصد آستانه تشخیص شباهت:</span>
-                    </label>
-                    <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
-                      {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
-                    </span>
-                  </div>
-
-                  {/* Range Slider for granular sensitivity selection */}
-                  <div className="space-y-1">
-                    <input
-                      type="range"
-                      min={50}
-                      max={100}
-                      step={5}
-                      value={duplicateSimilarityThreshold}
-                      onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
-                      className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
-                    />
-                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                      <span>۵۰٪ (بسیار حساس)</span>
-                      <span>۸۰٪ (پیش‌فرض)</span>
-                      <span>۱۰۰٪ (کاملاً یکسان)</span>
-                    </div>
-                  </div>
-
-                  {/* Preset Buttons */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 pt-1">
-                    {[
-                      { val: 50, label: '۵۰٪', desc: 'خیلی حساس' },
-                      { val: 60, label: '۶۰٪', desc: 'حساسیت بالا' },
-                      { val: 70, label: '۷۰٪', desc: 'حساسیت متوسط' },
-                      { val: 80, label: '۸۰٪', desc: 'استاندارد' },
-                      { val: 90, label: '۹۰٪', desc: 'دقت بالا' },
-                      { val: 95, label: '۹۵٪', desc: 'بسیار دقیق' },
-                      { val: 100, label: '۱۰۰٪', desc: 'کاملاً عینا' },
-                    ].map((item) => (
-                      <button
-                        type="button"
-                        key={item.val}
-                        onClick={() => setDuplicateSimilarityThreshold(item.val)}
-                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                          duplicateSimilarityThreshold === item.val
-                            ? 'bg-amber-500/25 border-amber-400 text-amber-300 font-extrabold shadow-md scale-102'
-                            : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
-                        }`}
-                      >
-                        <span className="text-xs font-extrabold block">{item.label}</span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">{item.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Dynamic Guarantee Notice */}
-                <div className={`p-3 rounded-xl text-xs flex items-center gap-2.5 ${
-                  duplicateAction === 'delete_existing'
-                    ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
-                    : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'
-                }`}>
-                  <ShieldCheck className={`w-5 h-5 shrink-0 ${duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-blue-400'}`} />
+          {/* Section 3.5: Duplicate Detection & Prevention (تشخیص و پاکسازی پست‌های تکراری - مخصوص تلگرام) */}
+          {!isTwitterSource && !isWebsiteSource && (
+            <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
+                <div className="flex items-center gap-2">
+                  <CopyCheck className="w-5 h-5 text-amber-400" />
                   <div>
-                    <span className="font-bold block">
-                      {duplicateAction === 'delete_existing'
-                        ? 'توضیحات جایگزینی خودکار پست تکراری:'
-                        : 'تضمین عدم ارسال پست‌های تکراری:'}
-                    </span>
-                    <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
-                      {duplicateAction === 'delete_existing'
-                        ? `هرگاه پست جدیدی با یکی از پست‌های قبلی کانال بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، پست قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.`
-                        : `پست‌های قدیمی کانال محفوظ می‌مانند. اگر پست جدیدی با پست‌های قبلی بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.`}
-                    </span>
+                    <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص و جلوگیـری از پست‌های تکراری</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      الگوریتم هوشمند سنجش شباهت محتوا و پاکسازی اتوماتیک پست‌های تکراری در کانال مقصد
+                    </p>
                   </div>
                 </div>
 
-                {/* Target Channel Supervisor Banner */}
-                <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs flex items-center gap-2.5">
-                  <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0" />
-                  <div>
-                    <span className="font-bold block text-purple-300">
-                      ناظر یکپارچه کانال مقصد ({connection.targetChannel}):
-                    </span>
-                    <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
-                      ناظر سیستم تمام کانال‌های مبدأ متصل به <strong>{connection.targetChannel}</strong> را به‌صورت سراسری زیر نظر می‌گیرد. حتی اگر چند کانال مبدأ یک خبر یا پست یکسان را به صورت همزمان ارسال کنند، قفل ناظر کانال مقصد از ورود پست‌های همزمان یا تکراری به کانال شما جلوگیری خواهد کرد.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Duplicate Action Behavior */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200">
-                    ۲. اقدام هنگام مواجهه با پست تکراری جدید:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDuplicateAction('skip')}
-                      className="p-3.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-md text-right w-full"
-                    >
-                      <span className="text-xs font-bold block flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                        <span>🚫 جلوگیرى از انتشار و عدم ارسال پست جدید (پیش‌فرض هوشمند)</span>
-                      </span>
-                      <span className="text-[11px] text-slate-300 block mt-1 leading-relaxed">
-                        از آپلود پست جدید تکراری در لحظه جلوگیری می‌شود و تمام پست‌های قبلی کانال بدون هیچ‌گونه دستکاری یا حذفی کاملاً سالم باقی می‌مانند.
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Media Check Option */}
-                <label className="flex items-center gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
                   <input
                     type="checkbox"
-                    checked={checkMediaDuplicate}
-                    onChange={(e) => setCheckMediaDuplicate(e.target.checked)}
+                    checked={preventDuplicates}
+                    onChange={(e) => setPreventDuplicates(e.target.checked)}
                     className="w-4 h-4 accent-amber-400 rounded"
                   />
-                  <div className="text-xs">
-                    <span className="font-bold text-white block">بررسی و تطابق فایل‌های رسانه‌ای (عکس و ویدیو)</span>
-                    <span className="text-slate-400 mt-0.5 block text-[11px]">
-                      در صورت یکسان بودن تصویر یا ویدیوی دو پست، به عنوان پست تکراری شناسایی شده و بر اساس تنظیم فوق اقدام می‌شود.
-                    </span>
-                  </div>
+                  <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
                 </label>
+              </div>
 
-                {/* Manual Scan and Clean Duplicates Button */}
-                <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/30 space-y-2.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <span className="text-xs font-bold text-amber-300 block">پاکسازی فوری پست‌های تکراری موجود در کانال</span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        اسکن هوشمند تمام پست‌های منتقل‌شده قبلی در کانال مقصد و حذف موارد تکراری
+              {preventDuplicates && (
+                <div className="space-y-4 animate-fadeIn pt-1">
+                  {/* Threshold Selection */}
+                  <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <span>۱. درصد آستانه تشخیص شباهت:</span>
+                      </label>
+                      <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
+                        {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleCleanDuplicatesNow}
-                      disabled={cleaningDuplicates}
-                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <CopyCheck className={`w-4 h-4 ${cleaningDuplicates ? 'animate-spin' : ''}`} />
-                      <span>{cleaningDuplicates ? 'در حال اسکن و پاکسازی...' : 'اسکن و پاکسازی آنلاین'}</span>
-                    </button>
+                    {/* Range Slider for granular sensitivity selection */}
+                    <div className="space-y-1">
+                      <input
+                        type="range"
+                        min={50}
+                        max={100}
+                        step={5}
+                        value={duplicateSimilarityThreshold}
+                        onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
+                        className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>۵۰٪ (بسیار حساس)</span>
+                        <span>۸۰٪ (پیش‌فرض)</span>
+                        <span>۱۰۰٪ (کاملاً یکسان)</span>
+                      </div>
+                    </div>
+
+                    {/* Preset Buttons */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 pt-1">
+                      {[
+                        { val: 50, label: '۵۰٪', desc: 'خیلی حساس' },
+                        { val: 60, label: '۶۰٪', desc: 'حساسیت بالا' },
+                        { val: 70, label: '۷۰٪', desc: 'حساسیت متوسط' },
+                        { val: 80, label: '۸۰٪', desc: 'استاندارد' },
+                        { val: 90, label: '۹۰٪', desc: 'دقت بالا' },
+                        { val: 95, label: '۹۵٪', desc: 'بسیار دقیق' },
+                        { val: 100, label: '۱۰۰٪', desc: 'کاملاً عینا' },
+                      ].map((item) => (
+                        <button
+                          type="button"
+                          key={item.val}
+                          onClick={() => setDuplicateSimilarityThreshold(item.val)}
+                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            duplicateSimilarityThreshold === item.val
+                              ? 'bg-amber-500/25 border-amber-400 text-amber-300 font-extrabold shadow-md scale-102'
+                              : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="text-xs font-extrabold block">{item.label}</span>
+                          <span className="text-[9px] text-slate-400 block mt-0.5">{item.desc}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {cleanDuplicatesResult && (
-                    <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                      cleanDuplicatesResult.ok 
-                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' 
-                        : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-                    }`}>
-                      <span className="font-bold">{cleanDuplicatesResult.message}</span>
+                  {/* Dynamic Guarantee Notice */}
+                  <div className={`p-3 rounded-xl text-xs flex items-center gap-2.5 ${
+                    duplicateAction === 'delete_existing'
+                      ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+                      : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'
+                  }`}>
+                    <ShieldCheck className={`w-5 h-5 shrink-0 ${duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-blue-400'}`} />
+                    <div>
+                      <span className="font-bold block">
+                        {duplicateAction === 'delete_existing'
+                          ? 'توضیحات جایگزینی خودکار پست تکراری:'
+                          : 'تضمین عدم ارسال پست‌های تکراری:'}
+                      </span>
+                      <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                        {duplicateAction === 'delete_existing'
+                          ? `هرگاه پست جدیدی با یکی از پست‌های قبلی کانال بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، پست قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.`
+                          : `پست‌های قدیمی کانال محفوظ می‌مانند. اگر پست جدیدی با پست‌های قبلی بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.`}
+                      </span>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Target Channel Supervisor Banner */}
+                  <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs flex items-center gap-2.5">
+                    <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-purple-300">
+                        ناظر یکپارچه کانال مقصد ({connection.targetChannel}):
+                      </span>
+                      <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                        ناظر سیستم تمام کانال‌های مبدأ متصل به <strong>{connection.targetChannel}</strong> را به‌صورت سراسری زیر نظر می‌گیرد. حتی اگر چند کانال مبدأ یک خبر یا پست یکسان را به صورت همزمان ارسال کنند، قفل ناظر کانال مقصد از ورود پست‌های همزمان یا تکراری به کانال شما جلوگیری خواهد کرد.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Duplicate Action Behavior */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-200">
+                      ۲. اقدام هنگام مواجهه با پست تکراری جدید:
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateAction('skip')}
+                        className="p-3.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-md text-right w-full"
+                      >
+                        <span className="text-xs font-bold block flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                          <span>🚫 جلوگیرى از انتشار و عدم ارسال پست جدید (پیش‌فرض هوشمند)</span>
+                        </span>
+                        <span className="text-[11px] text-slate-300 block mt-1 leading-relaxed">
+                          از آپلود پست جدید تکراری در لحظه جلوگیری می‌شود و تمام پست‌های قبلی کانال بدون هیچ‌گونه دستکاری یا حذفی کاملاً سالم باقی می‌مانند.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Media Check Option */}
+                  <label className="flex items-center gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={checkMediaDuplicate}
+                      onChange={(e) => setCheckMediaDuplicate(e.target.checked)}
+                      className="w-4 h-4 accent-amber-400 rounded"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">بررسی و تطابق فایل‌های رسانه‌ای (عکس و ویدیو)</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px]">
+                        در صورت یکسان بودن تصویر یا ویدیوی دو پست، به عنوان پست تکراری شناسایی شده و بر اساس تنظیم فوق اقدام می‌شود.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Manual Scan and Clean Duplicates Button */}
+                  <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/30 space-y-2.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-amber-300 block">پاکسازی فوری پست‌های تکراری موجود در کانال</span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          اسکن هوشمند تمام پست‌های منتقل‌شده قبلی در کانال مقصد و حذف موارد تکراری
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCleanDuplicatesNow}
+                        disabled={cleaningDuplicates}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <CopyCheck className={`w-4 h-4 ${cleaningDuplicates ? 'animate-spin' : ''}`} />
+                        <span>{cleaningDuplicates ? 'در حال اسکن و پاکسازی...' : 'اسکن و پاکسازی آنلاین'}</span>
+                      </button>
+                    </div>
+
+                    {cleanDuplicatesResult && (
+                      <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                        cleanDuplicatesResult.ok 
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' 
+                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+                      }`}>
+                        <span className="font-bold">{cleanDuplicatesResult.message}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Section 4: Signature / Tag (افزودن امضا یا تگ اختصاصی به پیام) */}
           <div className="space-y-2">
@@ -1151,6 +1182,8 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
               </div>
             )}
           </div>
+
+
 
           {/* Section 5: Live Interactive Preview */}
           <div className="space-y-2 pt-2 border-t border-white/5">

@@ -1247,10 +1247,15 @@ async function sendTelegramMessage(
     const method = payload.method || "sendMessage";
 
     const callApi = async (m: string, p: any) => {
+      const extraParams: any = {};
+      if (payload.reply_to_message_id) {
+        extraParams.reply_to_message_id = payload.reply_to_message_id;
+        extraParams.reply_parameters = { message_id: payload.reply_to_message_id };
+      }
       const res = await fetch(`https://api.telegram.org/bot${botToken}/${m}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: targetChannel, ...p }),
+        body: JSON.stringify({ chat_id: targetChannel, ...extraParams, ...p }),
       });
       return await res.json();
     };
@@ -1841,6 +1846,7 @@ function transformTextForBale(
 // Telegram Public Channel Scraping Parser
 interface ScrapedPost {
   msgId: number;
+  replyToSourceMsgId?: number;
   text: string;
   hasPhoto: boolean;
   photoUrl?: string;
@@ -1857,6 +1863,52 @@ interface ScrapedPost {
   isMediaGroup: boolean;
   type: ForwardedMessageRecord["type"];
   mediaItems: { type: 'photo' | 'video'; url: string }[];
+}
+
+async function editTelegramTargetMessage(
+  botToken: string,
+  targetChannel: string,
+  messageId: number,
+  textOrCaption: string,
+  type: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    let channel = targetChannel.trim();
+    if (!channel.startsWith("@") && !channel.startsWith("-") && isNaN(Number(channel))) {
+      channel = `@${channel}`;
+    }
+    const isMedia = type === "photo" || type === "video" || type === "media_group" || type === "animation" || type === "document";
+    const method = isMedia ? "editMessageCaption" : "editMessageText";
+    const bodyKey = isMedia ? "caption" : "text";
+
+    let res = await fetch(`https://api.telegram.org/bot${botToken.trim()}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: channel,
+        message_id: messageId,
+        [bodyKey]: textOrCaption,
+        parse_mode: "HTML",
+      }),
+    });
+    let data = await res.json();
+    if (data.ok) return { ok: true };
+
+    const plain = stripHtmlToPlainText(textOrCaption);
+    res = await fetch(`https://api.telegram.org/bot${botToken.trim()}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: channel,
+        message_id: messageId,
+        [bodyKey]: plain,
+      }),
+    });
+    data = await res.json();
+    return { ok: data.ok, error: data.description };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "خطا در ویرایش پیام" };
+  }
 }
 
 async function fetchWithRetry(url: string, attempts = 2): Promise<Response> {
@@ -2006,8 +2058,27 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       const msgId = parseInt(msgIdStr, 10);
       if (isNaN(msgId)) return;
 
+      // Filter out service messages and pinned post notifications (Nokteh 4)
+      const isServiceMessage = $post.find(".tgme_widget_message_service, .service_message, .tgme_widget_message_service_title, .tgme_widget_message_pinned").length > 0 || $post.hasClass("service_message");
+      const rawTextContent = $post.text().toLowerCase();
+      const isPinnedNotice = isServiceMessage || rawTextContent.includes("pinned a message") || rawTextContent.includes("پیام را سنجاق کرد") || rawTextContent.includes("سنجاق شد");
+      if (isPinnedNotice) {
+        return; // Skip pinned post notifications
+      }
+
       const text = extractTelegramHtml($post.find(".js-message_text"), $);
       
+      // Extract Reply target message ID (Nokteh 6)
+      let replyToSourceMsgId: number | undefined = undefined;
+      const $replyLink = $post.find("a.tgme_widget_message_reply");
+      if ($replyLink.length > 0) {
+        const replyHref = $replyLink.attr("href") || "";
+        const match = replyHref.match(/\/(\d+)\/?$/);
+        if (match && match[1]) {
+          replyToSourceMsgId = parseInt(match[1], 10);
+        }
+      }
+
       const mediaItems: { type: 'photo' | 'video'; url: string }[] = [];
 
       // Extract Photos: Search ONLY in photo wrappers outside text, replies, quote boxes, link previews, and video wrappers
@@ -2151,6 +2222,7 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
 
       posts.push({
         msgId,
+        replyToSourceMsgId,
         text,
         hasPhoto,
         photoUrl,
@@ -2269,11 +2341,77 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
   }
 }
 
+async function scrapeXSourcePage(sourceChannel: string): Promise<{ ok: boolean; posts: any[]; channelTitle?: string; error?: string }> {
+  try {
+    const rawTarget = sourceChannel.trim().replace(/^@/, '');
+    const cleanHandle = rawTarget.replace(/https?:\/\/(x|twitter)\.com\//i, '').split('/')[0].split('?')[0];
+    const rssItems = await fetchNewsRssForTopic(`${cleanHandle} X twitter`, 5);
+    
+    if (!rssItems || rssItems.length === 0) {
+      return { ok: true, posts: [], channelTitle: `@${cleanHandle} (ایکس)` };
+    }
+
+    const posts = rssItems.map((item, idx) => {
+      const hashStr = item.title + (item.pubDate || idx);
+      const hash = Math.abs(hashStr.split('').reduce((acc, c) => ((acc << 5) - acc) + c.charCodeAt(0), 0));
+      const msgId = hash || (1000 + idx);
+      return {
+        msgId,
+        text: `🐦 **پست جدید از پیج ایکس 𝕏 (@${cleanHandle})**\n\n${item.title}\n\n${item.snippet && item.snippet !== item.title ? item.snippet + '\n\n' : ''}🔗 [مشاهده در ایکس](${item.link})`,
+        type: 'text' as const,
+      };
+    });
+
+    return { ok: true, posts, channelTitle: `پیج ایکس 𝕏 (@${cleanHandle})` };
+  } catch (err: any) {
+    return { ok: false, posts: [], error: `خطا در استخراج از ایکس: ${err.message}` };
+  }
+}
+
+async function scrapeWebsiteSourcePage(sourceUrl: string): Promise<{ ok: boolean; posts: any[]; channelTitle?: string; error?: string }> {
+  try {
+    const targetUrl = sourceUrl.startsWith('http') ? sourceUrl : `https://${sourceUrl}`;
+    let domain = 'وب‌سایت';
+    try { domain = new URL(targetUrl).hostname; } catch (_) {}
+
+    const rssItems = await fetchNewsRssForTopic(`site:${domain} ${targetUrl}`, 5);
+    if (!rssItems || rssItems.length === 0) {
+      return { ok: true, posts: [], channelTitle: domain };
+    }
+
+    const posts = rssItems.map((item, idx) => {
+      const hashStr = item.title + (item.pubDate || idx);
+      const hash = Math.abs(hashStr.split('').reduce((acc, c) => ((acc << 5) - acc) + c.charCodeAt(0), 0));
+      const msgId = hash || (2000 + idx);
+      return {
+        msgId,
+        text: `🌐 **خبر جدید از وب‌سایت ${domain}**\n\n**${item.title}**\n\n${item.snippet && item.snippet !== item.title ? item.snippet + '\n\n' : ''}🔗 [مطالعه کامل خبر](${item.link})`,
+        type: 'text' as const,
+      };
+    });
+
+    return { ok: true, posts, channelTitle: `وب‌سایت 🌐 (${domain})` };
+  } catch (err: any) {
+    return { ok: false, posts: [], error: `خطا در استخراج از وب‌سایت: ${err.message}` };
+  }
+}
+
 // Connection Sync Worker Function
 async function processConnectionSync(conn: TelegramConnection, forceAll: boolean = false) {
   if (conn.status === "paused") return;
 
-  const scrapeResult = await scrapeTelegramChannel(conn.sourceChannel);
+  let scrapeResult: { ok: boolean; posts: any[]; channelTitle?: string; error?: string };
+
+  const isTwitter = conn.sourceType === 'twitter' || /x\.com|twitter\.com/i.test(conn.sourceChannel) || (conn.sourceChannel.startsWith('@') && !conn.sourceChannel.includes('_bot') && conn.sourceType !== 'telegram');
+  const isWeb = conn.sourceType === 'website' || (conn.sourceChannel.startsWith('http') && conn.sourceType !== 'telegram');
+
+  if (conn.sourceType === 'twitter' || (isTwitter && conn.sourceType !== 'telegram')) {
+    scrapeResult = await scrapeXSourcePage(conn.sourceChannel);
+  } else if (conn.sourceType === 'website' || (isWeb && conn.sourceType !== 'telegram')) {
+    scrapeResult = await scrapeWebsiteSourcePage(conn.sourceChannel);
+  } else {
+    scrapeResult = await scrapeTelegramChannel(conn.sourceChannel);
+  }
   if (!scrapeResult.ok) {
     conn.status = "error";
     conn.lastError = scrapeResult.error || "خطا در اتصال به کانال مبدأ";
@@ -2290,6 +2428,30 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
   if (posts.length === 0) {
     addLog(conn.id, "info", `بررسی انجام شد - هیچ پیامی در کانال عمومی یافت نشد.`);
     return;
+  }
+
+  // Sync post edits from source channel to target channel (Nokteh 5)
+  for (const p of posts) {
+    const existingRecord = messages.find(
+      (m) => m.connectionId === conn.id && m.sourceMsgId === p.msgId && m.status === "success" && m.targetMsgId
+    );
+    if (existingRecord && existingRecord.targetMsgId) {
+      const updatedText = await applyTextTransformations(p.text, conn.settings, conn.sourceChannel, conn.targetChannel);
+      if (updatedText && updatedText !== existingRecord.caption) {
+        const editRes = await editTelegramTargetMessage(conn.botToken, conn.targetChannel, existingRecord.targetMsgId, updatedText, p.type);
+        if (editRes.ok) {
+          existingRecord.caption = updatedText;
+          writeJsonFile(MESSAGES_FILE, messages);
+          addLog(
+            conn.id,
+            "info",
+            `[ویرایش خودکار] پست #${p.msgId} در کانال مبدأ ویرایش شد و در کانال مقصد (${conn.targetChannel}) به‌روزرسانی گردید.`,
+            p.type,
+            p.msgId
+          );
+        }
+      }
+    }
   }
 
   let lastId = conn.lastMessageId;
@@ -2451,6 +2613,15 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
           photo: post.photoUrl || post.mediaItems?.find(m => m.type === 'photo')?.url,
           ...(transformedText ? { caption: transformedText } : {}),
         };
+      }
+    }
+
+    if (post.replyToSourceMsgId) {
+      const parentRecord = messages.find(
+        (m) => m.connectionId === conn.id && m.sourceMsgId === post.replyToSourceMsgId && m.status === "success" && m.targetMsgId
+      );
+      if (parentRecord && parentRecord.targetMsgId) {
+        payload.reply_to_message_id = parentRecord.targetMsgId;
       }
     }
 
@@ -2618,7 +2789,7 @@ app.get("/api/connections", (req, res) => {
 
 app.post("/api/connections", async (req, res) => {
   try {
-    const { sourceChannel, targetChannel, botToken, enableBale, baleTargetChannel, baleBotToken, baleReplaceId, settings }: CreateConnectionDTO = req.body;
+    const { sourceChannel, targetChannel, botToken, sourceType, enableBale, baleTargetChannel, baleBotToken, baleReplaceId, enableX, xTargetHandles, xApiKey, enableWeb, webTargetUrl, settings }: CreateConnectionDTO = req.body;
 
     if (!sourceChannel || !targetChannel || !botToken) {
       return res.status(400).json({ error: "لطفاً تمام فیلدها را وارد کنید." });
@@ -2668,10 +2839,16 @@ app.post("/api/connections", async (req, res) => {
       lastError: scrapeRes.ok ? null : scrapeRes.error || null,
       botName: botName || "ربات ثبت شده",
       sourceTitle,
+      sourceType: sourceType || (sourceChannel.toLowerCase().includes('x.com') || sourceChannel.toLowerCase().includes('twitter.com') ? 'twitter' : 'telegram'),
       enableBale: !!enableBale,
       baleTargetChannel: baleTargetChannel?.trim() || undefined,
       baleBotToken: baleBotToken?.trim() || undefined,
       baleReplaceId: resolvedBaleReplaceId,
+      enableX: !!enableX,
+      xTargetHandles: xTargetHandles?.trim() || undefined,
+      xApiKey: xApiKey?.trim() || undefined,
+      enableWeb: !!enableWeb,
+      webTargetUrl: webTargetUrl?.trim() || undefined,
       settings: settings || {
         rewriteMode: "none",
         aiPrompt: "متن را به صورت جذاب، روان و خوانا بازنویسی کن:",
@@ -2684,6 +2861,11 @@ app.post("/api/connections", async (req, res) => {
         baleTargetChannel: baleTargetChannel?.trim() || "",
         baleBotToken: baleBotToken?.trim() || "",
         baleReplaceId: resolvedBaleReplaceId || "",
+        enableX: !!enableX,
+        xTargetHandles: xTargetHandles?.trim() || "",
+        xApiKey: xApiKey?.trim() || "",
+        enableWeb: !!enableWeb,
+        webTargetUrl: webTargetUrl?.trim() || "",
         preventDuplicates: true,
         duplicateSimilarityThreshold: 80,
         duplicateAction: 'skip',
@@ -2698,6 +2880,14 @@ app.post("/api/connections", async (req, res) => {
 
     if (newConnection.enableBale && newConnection.baleTargetChannel) {
       addLog(newConnection.id, "info", `ارسال همزمان به پیام‌رسان بله (${newConnection.baleTargetChannel}) نیز فعال گردید.`);
+    }
+
+    if (newConnection.enableX && newConnection.xTargetHandles) {
+      addLog(newConnection.id, "info", `ارسال همزمان به پیج(های) ایکس 𝕏 (${newConnection.xTargetHandles}) نیز فعال گردید.`);
+    }
+
+    if (newConnection.enableWeb && newConnection.webTargetUrl) {
+      addLog(newConnection.id, "info", `اتصال به وب‌سایت 🌐 (${newConnection.webTargetUrl}) نیز فعال گردید.`);
     }
 
     setTimeout(() => {
@@ -2730,6 +2920,13 @@ app.put("/api/connections/:id/settings", (req, res) => {
   if (bodySettings.baleBotToken !== undefined) conn.baleBotToken = bodySettings.baleBotToken.trim();
   if (bodySettings.baleReplaceId !== undefined) conn.baleReplaceId = bodySettings.baleReplaceId.trim();
 
+  conn.enableX = !!bodySettings.enableX;
+  if (bodySettings.xTargetHandles !== undefined) conn.xTargetHandles = bodySettings.xTargetHandles.trim();
+  if (bodySettings.xApiKey !== undefined) conn.xApiKey = bodySettings.xApiKey.trim();
+
+  conn.enableWeb = !!bodySettings.enableWeb;
+  if (bodySettings.webTargetUrl !== undefined) conn.webTargetUrl = bodySettings.webTargetUrl.trim();
+
   conn.settings = {
     ...(conn.settings || {}),
     ...bodySettings,
@@ -2749,6 +2946,11 @@ app.put("/api/connections/:id/settings", (req, res) => {
     baleTargetChannel: bodySettings.baleTargetChannel?.trim() || "",
     baleBotToken: bodySettings.baleBotToken?.trim() || "",
     baleReplaceId: bodySettings.baleReplaceId?.trim() || "",
+    enableX: !!bodySettings.enableX,
+    xTargetHandles: bodySettings.xTargetHandles?.trim() || "",
+    xApiKey: bodySettings.xApiKey?.trim() || "",
+    enableWeb: !!bodySettings.enableWeb,
+    webTargetUrl: bodySettings.webTargetUrl?.trim() || "",
     preventDuplicates: bodySettings.preventDuplicates !== undefined ? !!bodySettings.preventDuplicates : true,
     duplicateSimilarityThreshold: bodySettings.duplicateSimilarityThreshold ?? 80,
     duplicateAction: bodySettings.duplicateAction || 'skip',
@@ -3247,7 +3449,7 @@ app.post("/api/connections/:id/clean-duplicates", async (req, res) => {
 // ==================== EXPERIMENTAL FEATURES: X/TWITTER & WEB IMPORTER + AI TREND HUNTER ====================
 
 // Helper to fetch live news RSS for trends fallback (targeting fresh 24h news)
-async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<Array<{ title: string; link: string; pubDate: string; snippet: string }>> {
+async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<Array<{ title: string; link: string; pubDate: string; snippet: string; imageUrl?: string }>> {
   try {
     // Search Google News for recent items (when:1d forces news within last 24 hours)
     let rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic + " when:1d")}&hl=fa&gl=IR&ceid=IR:fa`;
@@ -3257,7 +3459,7 @@ async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<A
     
     let xml = res.ok ? await res.text() : "";
     let $ = cheerio.load(xml, { xmlMode: true });
-    let items: Array<{ title: string; link: string; pubDate: string; snippet: string }> = [];
+    let items: Array<{ title: string; link: string; pubDate: string; snippet: string; imageUrl?: string }> = [];
 
     $('item').each((i, el) => {
       if (items.length < count) {
@@ -3265,13 +3467,18 @@ async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<A
         const link = $(el).find('link').text().trim();
         const pubDate = $(el).find('pubDate').text().trim();
         const descHtml = $(el).find('description').text().trim();
-        const desc = cheerio.load(descHtml).text().replace(/<[^>]*>/g, '').trim();
+        const $desc = cheerio.load(descHtml);
+        const desc = $desc.text().replace(/<[^>]*>/g, '').trim();
+        let imageUrl = $(el).find('media\\:content, content').attr('url') || $(el).find('enclosure').attr('url') || $desc('img').attr('src');
+        if (imageUrl && imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+
         if (title) {
           items.push({
             title: title.replace(/ - [^-]+$/, ''),
             link,
             pubDate,
             snippet: desc || title,
+            imageUrl: imageUrl || undefined,
           });
         }
       }
@@ -3292,13 +3499,18 @@ async function fetchNewsRssForTopic(topic: string, count: number = 5): Promise<A
             const link = $fallback(el).find('link').text().trim();
             const pubDate = $fallback(el).find('pubDate').text().trim();
             const descHtml = $fallback(el).find('description').text().trim();
-            const desc = cheerio.load(descHtml).text().replace(/<[^>]*>/g, '').trim();
+            const $desc = cheerio.load(descHtml);
+            const desc = $desc.text().replace(/<[^>]*>/g, '').trim();
+            let imageUrl = $fallback(el).find('media\\:content, content').attr('url') || $fallback(el).find('enclosure').attr('url') || $desc('img').attr('src');
+            if (imageUrl && imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+
             if (title && !items.some(existing => existing.title === title)) {
               items.push({
                 title: title.replace(/ - [^-]+$/, ''),
                 link,
                 pubDate,
                 snippet: desc || title,
+                imageUrl: imageUrl || undefined,
               });
             }
           }
@@ -3563,6 +3775,7 @@ ${rssContext}
     "telegramText": "متن کامل آماده انتشار برای کانال تلگرام به زبان فارسی روان و جذاب همراه با ایموجی‌های عالی، فونت خوانا، لید خبری و هشتگ‌ها",
     "hashtags": ["#توییتر", "#ترند"],
     "sourceUrl": "لینک مستقیم توییت یا منبع خبر در وب",
+    "mediaUrls": ["https://... (لینک مستقیم عکس یا ویدیو مربوط به خبر یا توییت در صورت وجود)"],
     "topicCategory": "دسته بندی موضوعی"
   }
 ]`;
@@ -3596,6 +3809,20 @@ ${rssContext}
           } catch (__) {}
         }
       }
+
+      if (Array.isArray(trends)) {
+        trends = trends.map((t: any, idx: number) => {
+          const matchedRss = rssItems[idx];
+          const mUrls: string[] = Array.isArray(t.mediaUrls) ? t.mediaUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http')) : [];
+          if (mUrls.length === 0 && matchedRss?.imageUrl) {
+            mUrls.push(matchedRss.imageUrl);
+          }
+          return {
+            ...t,
+            mediaUrls: mUrls,
+          };
+        });
+      }
     } catch (aiErr: any) {
       console.warn("Gemini AI trends generation bypassed due to quota/error:", aiErr?.message || aiErr);
     }
@@ -3612,6 +3839,7 @@ ${rssContext}
             telegramText: `🔥 **ترند داغ در X و وب:** ${item.title}\n\n📌 **موضوع:** ${topic}\n\n${item.snippet || item.title}\n\n🌐 **لینک منبع:** ${item.link}\n\n#توییتر #ترند_روز #${cleanTag}`,
             hashtags: ["#توییتر", "#ترند", `#${cleanTag}`],
             sourceUrl: item.link,
+            mediaUrls: item.imageUrl ? [item.imageUrl] : [],
             topicCategory: topic,
           };
         });
@@ -3625,6 +3853,7 @@ ${rssContext}
             telegramText: `🔥 **ترند داغ شبکه اجتماعی X (توییتر)**\n\n📌 **موضوع:** ${topic}\n\nبحث‌ها و تحلیل‌های متعددی درباره ${topic} در توییتر فارسی و بین‌المللی شکل گرفته است.\n\n#توییتر #ترند_روز #${cleanTag}`,
             hashtags: ["#توییتر", "#ترند"],
             sourceUrl: "https://x.com/explore",
+            mediaUrls: [],
             topicCategory: topic,
           },
         ];
@@ -4557,6 +4786,9 @@ app.post("/api/subscriptions/purchase-request", (req, res) => {
     const requestedMonths = Number(billingCycleMonths) || 1;
     const targetPlan = planId === "vip" ? "vip" : "pro";
 
+    const isAdmin = user.role === "admin";
+    const status = isAdmin ? "approved" : "pending";
+
     // Create purchase request record
     const newRequest = {
       id: "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
@@ -4571,35 +4803,39 @@ app.post("/api/subscriptions/purchase-request", (req, res) => {
       paymentMethod: paymentMethod || "card_to_card",
       transactionId: transactionId ? String(transactionId).trim() : "",
       amountPaid: Number(amountPaid) || 0,
-      status: "approved",
+      status,
       createdAt: new Date().toISOString(),
-      processedAt: new Date().toISOString(),
+      processedAt: isAdmin ? new Date().toISOString() : null,
     };
 
-    // Activate subscription
-    const now = new Date();
-    let currentExpire = user.subscriptionExpireAt ? new Date(user.subscriptionExpireAt) : new Date();
-    if (currentExpire.getTime() < now.getTime()) {
-      currentExpire = now;
+    if (isAdmin) {
+      // Activate subscription immediately for admin
+      const now = new Date();
+      let currentExpire = user.subscriptionExpireAt ? new Date(user.subscriptionExpireAt) : new Date();
+      if (currentExpire.getTime() < now.getTime()) {
+        currentExpire = now;
+      }
+
+      const daysToAdd = requestedMonths * 30;
+      currentExpire.setDate(currentExpire.getDate() + daysToAdd);
+
+      user.subscriptionStatus = "active";
+      user.plan = targetPlan;
+      user.subscriptionExpireAt = currentExpire.toISOString();
+      user.maxConnections = targetPlan === "vip" ? 20 : 10;
+      user.updatedAt = new Date().toISOString();
+
+      writeJsonFile(USERS_FILE, users);
     }
-
-    const daysToAdd = requestedMonths * 30;
-    currentExpire.setDate(currentExpire.getDate() + daysToAdd);
-
-    user.subscriptionStatus = "active";
-    user.plan = targetPlan;
-    user.subscriptionExpireAt = currentExpire.toISOString();
-    user.maxConnections = targetPlan === "vip" ? 20 : 10;
-    user.updatedAt = new Date().toISOString();
-
-    writeJsonFile(USERS_FILE, users);
 
     purchaseRequests.unshift(newRequest);
     writeJsonFile(PURCHASE_REQUESTS_FILE, purchaseRequests);
 
     res.json({
       success: true,
-      message: `درخواست ارتقای اشتراک شما ثبت گردید! اشتراک ${newRequest.planTitle} شما فعال گردید.`,
+      message: isAdmin
+        ? `درخواست ارتقای اشتراک شما تایید و اشتراک ${newRequest.planTitle} فعال گردید.`
+        : `درخواست تمدید/ارتقای اشتراک ${newRequest.planTitle} شما با موفقیت ثبت شد و در انتظار بررسی و تایید مدیریت است. پس از بررسی ادمین، اشتراک شما فعال خواهد گردید.`,
       user,
       purchaseRequest: newRequest
     });

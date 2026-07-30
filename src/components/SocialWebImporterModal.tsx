@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap, Key, ArrowUp } from 'lucide-react';
-import { TelegramConnection } from '../types';
+import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap, Key, ArrowUp, PlusCircle } from 'lucide-react';
+import { TelegramConnection, CreateConnectionDTO } from '../types';
 import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, AutoTrendConfig } from '../services/api';
 
 interface SocialWebImporterModalProps {
   isOpen: boolean;
   onClose: () => void;
   connections: TelegramConnection[];
+  onCreateConnection?: (dto: CreateConnectionDTO) => Promise<void>;
 }
 
 export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
   isOpen,
   onClose,
   connections,
+  onCreateConnection,
 }) => {
-  const [activeTab, setActiveTab] = useState<'link' | 'trends'>('trends');
+  const [activeTab, setActiveTab] = useState<'twitter' | 'website' | 'trends'>('twitter');
   const modalContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToTop = () => {
@@ -51,6 +53,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
     telegramText: string;
     hashtags: string[];
     sourceUrl?: string;
+    mediaUrls?: string[];
     topicCategory?: string;
   }>>([]);
 
@@ -77,7 +80,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // Destination Bot Token & Target Channel (For Manual & Auto Actions)
   const [selectedConnId, setSelectedConnId] = useState<string>(
-    connections.find((c) => c.status === 'active')?.id || connections[0]?.id || ''
+    connections.find((c) => c.status === 'active')?.id || connections[0]?.id || 'custom'
   );
   const [customBotToken, setCustomBotToken] = useState('');
   const [customTargetChannel, setCustomTargetChannel] = useState('');
@@ -133,14 +136,14 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // Resolve active Bot Token and Channel
   const getTargetCredentials = () => {
-    if (selectedConnId === 'custom') {
+    if (!selectedConnId || selectedConnId === 'custom') {
       return {
         botToken: customBotToken.trim(),
         targetChannel: customTargetChannel.trim(),
       };
     }
     const found = connections.find((c) => c.id === selectedConnId);
-    if (found) {
+    if (found && found.botToken && found.targetChannel) {
       return {
         botToken: found.botToken.trim(),
         targetChannel: found.targetChannel.trim(),
@@ -389,6 +392,36 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
     }
   };
 
+  // Create auto monitoring connection in Connection Management Panel
+  const handleCreateMonitoringConnection = async (sourceUrlOrHandle: string) => {
+    if (!sourceUrlOrHandle.trim()) return;
+    const { botToken, targetChannel } = getTargetCredentials();
+    if (!botToken || !targetChannel) {
+      setStatusMessage({ type: 'error', text: 'لطفاً ابتدا توکن ربات تلگرام و کانال مقصد را وارد کنید تا این منبع به عنوان اتصال خودکار ثبت شود.' });
+      return;
+    }
+    if (!onCreateConnection) {
+      setStatusMessage({ type: 'error', text: 'قابلیت ایجاد اتصال در این بخش در دسترس نیست.' });
+      return;
+    }
+
+    try {
+      const isTwitter = sourceUrlOrHandle.toLowerCase().includes('twitter.com') || sourceUrlOrHandle.toLowerCase().includes('x.com') || (sourceUrlOrHandle.startsWith('@') && !sourceUrlOrHandle.includes('t.me'));
+      await onCreateConnection({
+        sourceType: isTwitter ? 'twitter' : 'website',
+        sourceChannel: sourceUrlOrHandle.trim(),
+        targetChannel: targetChannel.trim(),
+        botToken: botToken.trim(),
+      });
+      setStatusMessage({
+        type: 'success',
+        text: `✅ منبع "${sourceUrlOrHandle.trim()}" با موفقیت به عنوان اتصال خودکار زنده در "پنل مدیریت اتصالات" اضافه شد!`,
+      });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'خطا در افزودن منبع به پنل مدیریت اتصالات' });
+    }
+  };
+
   // Handle Post Single Trend Item
   const handlePostTrendItem = async (trendIndex: number) => {
     const item = trendResults[trendIndex];
@@ -528,51 +561,66 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
               <option value="custom">⚙️ توکن ربات و کانال سفارشی...</option>
             </select>
 
-            {selectedConnId === 'custom' && (
+            {(selectedConnId === 'custom' || !selectedConnId || connections.length === 0) && (
               <>
                 <input
                   type="text"
                   placeholder="توکن ربات تلگرام (botToken)..."
                   value={customBotToken}
                   onChange={(e) => setCustomBotToken(e.target.value)}
-                  className="p-2.5 text-xs font-mono bg-slate-900 border border-white/20 rounded-xl text-white dir-ltr text-left"
+                  className="p-2.5 text-xs font-mono bg-slate-900 border border-white/20 rounded-xl text-white dir-ltr text-right focus:outline-none focus:border-blue-400"
                 />
                 <input
                   type="text"
                   placeholder="آیدی کانال مقصد (@channel_id)..."
                   value={customTargetChannel}
                   onChange={(e) => setCustomTargetChannel(e.target.value)}
-                  className="p-2.5 text-xs font-mono bg-slate-900 border border-white/20 rounded-xl text-white dir-ltr text-left"
+                  className="p-2.5 text-xs font-mono bg-slate-900 border border-white/20 rounded-xl text-white dir-ltr text-right focus:outline-none focus:border-blue-400"
                 />
               </>
             )}
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 mb-6 p-1.5 neu-inset rounded-2xl bg-slate-950/80 border border-white/10">
+        {/* Top 3 Navigation Tabs */}
+        <div className="flex items-center gap-2 mb-6 p-1.5 neu-inset rounded-2xl bg-slate-950/80 border border-white/10 flex-wrap sm:flex-nowrap">
           <button
-            onClick={() => setActiveTab('trends')}
+            type="button"
+            onClick={() => { setActiveTab('twitter'); setStatusMessage(null); }}
             className={`flex-1 py-3 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'trends'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20'
-                : 'text-slate-300 hover:text-white'
+              activeTab === 'twitter'
+                ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-lg shadow-sky-500/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
-            <span>۱. کاوشگر زنده و ارسال خودکار ترندهای داغ X</span>
+            <Twitter className="w-4 h-4 text-sky-400" />
+            <span>𝕏 پیج / حساب ایکس (توییتر)</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('link')}
+            type="button"
+            onClick={() => { setActiveTab('website'); setStatusMessage(null); }}
             className={`flex-1 py-3 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'link'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
-                : 'text-slate-300 hover:text-white'
+              activeTab === 'website'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            <LinkIcon className="w-4 h-4" />
-            <span>۲. استخراج مستقیم از لینک (X / وب)</span>
+            <Globe className="w-4 h-4 text-purple-400" />
+            <span>🌐 وب‌سایت / RSS سایت</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('trends'); setStatusMessage(null); }}
+            className={`flex-1 py-3 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeTab === 'trends'
+                ? 'bg-gradient-to-r from-amber-600 to-pink-600 text-white shadow-lg shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>🔥 کاوشگر ترندهای داغ AI</span>
           </button>
         </div>
 
@@ -597,6 +645,284 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
             <span className={`leading-relaxed text-xs font-black ${statusMessage.type === 'error' ? 'text-black font-bold' : 'text-white'}`}>
               {statusMessage.text}
             </span>
+          </div>
+        )}
+
+        {/* TAB 1: Twitter (X) Source Extractor & Monitoring Creator */}
+        {activeTab === 'twitter' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="p-5 neu-flat bg-slate-900/90 border border-sky-500/30 rounded-2xl space-y-4">
+              <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/30">
+                  <Twitter className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">استخراج و مانیتورینگ حساب یا پست ایکس 𝕏 (توییتر)</h3>
+                  <p className="text-xs text-slate-300">
+                    آیدی یا لینک پست توییتر را وارد کنید تا محتوا توسط AI بازنویسی و ارسال شود یا به عنوان اتصال خودکار مانیتورینگ ثبت گردد.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-black text-white">
+                  آیدی پیج یا لینک توئیت در شبکه اجتماعی ایکس 𝕏 (توییتر):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: @BBCPersian یا https://x.com/username/status/188000..."
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full p-3 text-xs font-mono bg-slate-950 border border-white/20 rounded-xl text-white dir-ltr text-right focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300">
+                  دستور سفارشی بازنویسی (اختیاری):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: لحن پست را جذاب، خبری و با هشتگ‌های مرتبط تنظیم کن."
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  className="w-full p-2.5 text-xs bg-slate-950 border border-white/10 rounded-xl text-slate-200 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handleExtractLink}
+                  disabled={isExtracting}
+                  className="w-full sm:flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {isExtracting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                      <span>در حال استخراج و پردازش AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>استخراج و بازنویسی دستی با AI</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateMonitoringConnection(urlInput)}
+                  className="w-full sm:flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 border border-sky-400/40 text-sky-300 hover:bg-slate-800 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                >
+                  <PlusCircle className="w-4 h-4 text-sky-400" />
+                  <span>➕ ثبت به عنوان اتصال خودکار ایکس</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Extracted Data Result Card */}
+            {extractedData && (
+              <div className="p-5 neu-flat bg-slate-900 border border-sky-500/30 rounded-2xl space-y-4 animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <h4 className="text-xs font-black text-white">پیش‌نمایش محتوای استخراج شده توییتر</h4>
+                  </div>
+                  {extractedData.sourceUrl && (
+                    <a
+                      href={extractedData.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-sky-400 hover:underline flex items-center gap-1 font-mono dir-ltr"
+                    >
+                      <LinkIcon className="w-3 h-3" />
+                      <span>لینک منبع</span>
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    متن آماده جهت ارسال به تلگرام (قابل ویرایش):
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={extractedData.telegramText}
+                    onChange={(e) => setExtractedData({ ...extractedData, telegramText: e.target.value })}
+                    className="w-full p-3 text-xs bg-slate-950 border border-white/20 rounded-xl text-slate-100 focus:outline-none focus:border-sky-400 leading-relaxed"
+                  />
+                </div>
+
+                {extractedData.mediaUrls && extractedData.mediaUrls.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-300">رسانه‌های استخراج‌شده ({extractedData.mediaUrls.length}):</span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                      {extractedData.mediaUrls.map((url, idx) => (
+                        <img
+                          key={idx}
+                          src={url}
+                          alt={`Media ${idx}`}
+                          className="w-20 h-20 object-cover rounded-xl border border-white/10"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end pt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={handlePostExtracted}
+                    disabled={isExtracting}
+                    className="py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>ارسال مستقیم این پست به کانال تلگرام</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: Website / RSS Source Extractor & Monitoring Creator */}
+        {activeTab === 'website' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="p-5 neu-flat bg-slate-900/90 border border-purple-500/30 rounded-2xl space-y-4">
+              <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-400/30">
+                  <Globe className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">استخراج و مانیتورینگ وب‌سایت یا RSS سایت 🌐</h3>
+                  <p className="text-xs text-slate-300">
+                    آدرس وب‌سایت یا فید RSS خبر را وارد کنید تا اخبار توسط AI استخراج، خلاصه و ارسال شوند یا به عنوان اتصال خودکار ثبت گردند.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-black text-white">
+                  آدرس وب‌سایت یا فید RSS خبری: 🌐
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: https://example.com/news یا https://site.com/rss"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full p-3 text-xs font-mono bg-slate-950 border border-white/20 rounded-xl text-white dir-ltr text-right focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300">
+                  دستور سفارشی بازنویسی (اختیاری):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: اخبار را در ۳ پاراگراف کوتاه خلاصه کن."
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  className="w-full p-2.5 text-xs bg-slate-950 border border-white/10 rounded-xl text-slate-200 focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handleExtractLink}
+                  disabled={isExtracting}
+                  className="w-full sm:flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {isExtracting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                      <span>در حال استخراج و پردازش AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>استخراج و بازنویسی دستی با AI</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateMonitoringConnection(urlInput)}
+                  className="w-full sm:flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 border border-purple-400/40 text-purple-300 hover:bg-slate-800 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                >
+                  <PlusCircle className="w-4 h-4 text-purple-400" />
+                  <span>➕ ثبت به عنوان اتصال خودکار وب‌سایت</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Extracted Data Result Card */}
+            {extractedData && (
+              <div className="p-5 neu-flat bg-slate-900 border border-purple-500/30 rounded-2xl space-y-4 animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <h4 className="text-xs font-black text-white">پیش‌نمایش محتوای استخراج شده وب‌سایت</h4>
+                  </div>
+                  {extractedData.sourceUrl && (
+                    <a
+                      href={extractedData.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-purple-400 hover:underline flex items-center gap-1 font-mono dir-ltr"
+                    >
+                      <LinkIcon className="w-3 h-3" />
+                      <span>لینک منبع</span>
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    متن آماده جهت ارسال به تلگرام (قابل ویرایش):
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={extractedData.telegramText}
+                    onChange={(e) => setExtractedData({ ...extractedData, telegramText: e.target.value })}
+                    className="w-full p-3 text-xs bg-slate-950 border border-white/20 rounded-xl text-slate-100 focus:outline-none focus:border-purple-400 leading-relaxed"
+                  />
+                </div>
+
+                {extractedData.mediaUrls && extractedData.mediaUrls.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-300">رسانه‌های استخراج‌شده ({extractedData.mediaUrls.length}):</span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                      {extractedData.mediaUrls.map((url, idx) => (
+                        <img
+                          key={idx}
+                          src={url}
+                          alt={`Media ${idx}`}
+                          className="w-20 h-20 object-cover rounded-xl border border-white/10"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end pt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={handlePostExtracted}
+                    disabled={isExtracting}
+                    className="py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>ارسال مستقیم این پست به کانال تلگرام</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1016,6 +1342,22 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                       />
                     </div>
 
+                    {item.mediaUrls && item.mediaUrls.length > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <span className="text-xs font-bold text-slate-300">تصاویر/رسانه‌های ترند ({item.mediaUrls.length}):</span>
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                          {item.mediaUrls.map((url, mIdx) => (
+                            <img
+                              key={mIdx}
+                              src={url}
+                              alt={`Trend Media ${mIdx}`}
+                              className="w-20 h-20 object-cover rounded-xl border border-white/10"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         onClick={() => handlePostTrendItem(idx)}
@@ -1049,119 +1391,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
           </div>
         )}
 
-        {/* TAB 2: Direct Link Extractor */}
-        {activeTab === 'link' && (
-          <div className="space-y-5">
-            <div className="p-4 neu-inset rounded-2xl border border-white/10 bg-slate-800/40 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-400" />
-                  <span>آدرس مستقیم لینک X (توییتر) یا وب‌سایت خبری:</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://x.com/username/status/1880000000000000000 یا لینک مقاله سایت..."
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  className="w-full p-3 text-xs font-mono bg-slate-900 border border-white/20 rounded-xl text-white dir-ltr text-left focus:outline-none focus:border-blue-400"
-                />
-              </div>
 
-              <div className="flex items-center gap-3 pt-1">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={translateToPersian}
-                    onChange={(e) => setTranslateToPersian(e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 text-blue-500 focus:ring-blue-400 bg-slate-900"
-                  />
-                  <Sparkles className="w-4 h-4 text-yellow-400" />
-                  <span>ترجمه و بازنویسی حرفه‌ای به فارسی با هوش مصنوعی (Gemini)</span>
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  دستور سفارشی هوش مصنوعی (اختیاری):
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثلا: لحن خبری رسمی باشد، با ۳ هشتگ و ۲ ایموجی همراه با خلاصه کوتاه..."
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  className="w-full p-2.5 text-xs bg-slate-900 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-400"
-                />
-              </div>
-
-              <button
-                onClick={handleExtractLink}
-                disabled={isExtracting}
-                className="w-full py-3 px-5 neu-button bg-gradient-to-r from-blue-600 to-purple-600 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-purple-500 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isExtracting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>در حال دریافت و تحلیل هوشمند لینک...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-yellow-300" />
-                    <span>استخراج و بازنویسی محتوا با AI</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Extracted Output Result Preview */}
-            {extractedData && (
-              <div className="p-5 neu-flat bg-slate-900 border border-emerald-500/30 rounded-2xl space-y-4">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle className="w-4 h-4" />
-                    <span>پیش‌نمایش محتوای آماده ارسال به تلگرام:</span>
-                  </span>
-                  {extractedData.author && (
-                    <span className="text-xs text-slate-300 font-mono dir-ltr">
-                      منبع: {extractedData.author}
-                    </span>
-                  )}
-                </div>
-
-                {/* Media Preview if present */}
-                {extractedData.mediaUrls && extractedData.mediaUrls.length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                    {extractedData.mediaUrls.map((m, idx) => (
-                      <div key={idx} className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/15 bg-slate-950 shrink-0">
-                        <img src={m} alt={`رسانه ${idx}`} className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Text Area to Edit before Post */}
-                <div>
-                  <textarea
-                    rows={6}
-                    value={extractedData.telegramText}
-                    onChange={(e) => setExtractedData({ ...extractedData, telegramText: e.target.value })}
-                    className="w-full p-3 text-xs bg-slate-950 border border-white/20 rounded-xl text-slate-100 font-sans focus:outline-none focus:border-blue-400 leading-relaxed"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    onClick={handlePostExtracted}
-                    disabled={isExtracting}
-                    className="px-6 py-3 neu-button bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>ارسال به کانال تلگرام</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
       </div>
     </div>

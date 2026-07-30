@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Pause, Play, Trash2, FileText, Send, RefreshCw, Activity, 
   ArrowLeft, Clock, MessageSquare, Bot, AlertTriangle, CheckCircle2,
-  List, Sliders, Replace, CopyCheck
+  List, Sliders, Replace, CopyCheck, Twitter, Globe, Layers, Link
 } from 'lucide-react';
 import { TelegramConnection } from '../types';
 
@@ -99,8 +99,17 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
   const isBaleActive = connection.enableBale || connection.settings?.enableBale;
   const baleTarget = connection.baleTargetChannel || connection.settings?.baleTargetChannel;
 
+  const isXActive = connection.enableX || connection.settings?.enableX;
+  const xHandles = connection.xTargetHandles || connection.settings?.xTargetHandles;
+
+  const isWebActive = connection.enableWeb || connection.settings?.enableWeb;
+  const webTarget = connection.webTargetUrl || connection.settings?.webTargetUrl;
+
+  const isTwitterSource = connection.sourceType === 'twitter' || connection.sourceChannel.toLowerCase().includes('x.com') || connection.sourceChannel.toLowerCase().includes('twitter.com');
+  const isWebsiteSource = connection.sourceType === 'website' || connection.sourceChannel.startsWith('http');
+
   return (
-    <div className="neu-flat p-6 border border-white/5 transition-all hover:border-yellow-400/20">
+    <div className="neu-flat p-6 border border-white/5 transition-all hover:border-yellow-400/20 rounded-3xl">
       
       {/* Top Header Row: Source -> Target & Status */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/5">
@@ -109,6 +118,22 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
         <div className="flex items-center gap-3 flex-wrap">
           <div className="neu-inset px-3 py-1.5 flex items-center gap-2 text-sm font-bold text-white">
             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span>
+            {isTwitterSource ? (
+              <span className="flex items-center gap-1.5 text-sky-400">
+                <Twitter className="w-4 h-4 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">𝕏 ایکس</span>
+              </span>
+            ) : isWebsiteSource ? (
+              <span className="flex items-center gap-1.5 text-purple-400">
+                <Globe className="w-4 h-4 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">🌐 وب‌سایت</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <Send className="w-4 h-4 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">✈️ تلگرام</span>
+              </span>
+            )}
             <span className="dir-ltr text-right text-yellow-400">{connection.sourceChannel}</span>
           </div>
 
@@ -132,35 +157,53 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
             </span>
           )}
 
-          {connection.settings?.preventDuplicates !== false ? (
-            <button
-              onClick={() => onOpenSettings(connection)}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-                connection.settings?.duplicateAction === 'delete_existing'
-                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
-                  : 'bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
-              }`}
-              title={
-                connection.settings?.duplicateAction === 'delete_existing'
-                  ? "سیستم جایگزینی خودکار پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
-                  : "سیستم هوشمند جلوگیری از ارسال پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
-              }
-            >
-              <CopyCheck className={`w-3.5 h-3.5 ${connection.settings?.duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-amber-400'}`} />
-              <span>
-                {connection.settings?.duplicateAction === 'delete_existing' ? 'ضد تکرار و جایگزینی (' : 'ضد تکرار فعال ('}
-                {(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)
-              </span>
-            </button>
-          ) : (
-            <button
-              onClick={() => onOpenSettings(connection)}
-              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1 hover:bg-slate-700/50 transition-colors cursor-pointer"
-              title="سیستم جلوگیری از پست‌های تکراری غیرفعال است"
-            >
-              <CopyCheck className="w-3.5 h-3.5 text-slate-500" />
-              <span>ضد تکرار غیرفعال</span>
-            </button>
+          {isXActive && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 shadow-sm" title={`ارسال همزمان به پیج‌های ایکس (${xHandles})`}>
+              <Twitter className="w-3.5 h-3.5 text-sky-400" />
+              <span className="text-sky-400 font-extrabold">𝕏 ایکس:</span>
+              <span className="dir-ltr truncate max-w-[140px]">{xHandles || 'فعال'}</span>
+            </span>
+          )}
+
+          {isWebActive && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 shadow-sm" title={`اتصال به وب‌سایت (${webTarget})`}>
+              <Globe className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-purple-400 font-extrabold">🌐 سایت:</span>
+              <span className="dir-ltr truncate max-w-[120px]">{webTarget || 'فعال'}</span>
+            </span>
+          )}
+
+          {!isTwitterSource && !isWebsiteSource && (
+            connection.settings?.preventDuplicates !== false ? (
+              <button
+                onClick={() => onOpenSettings(connection)}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                  connection.settings?.duplicateAction === 'delete_existing'
+                    ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
+                    : 'bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+                }`}
+                title={
+                  connection.settings?.duplicateAction === 'delete_existing'
+                    ? "سیستم جایگزینی خودکار پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
+                    : "سیستم هوشمند جلوگیری از ارسال پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
+                }
+              >
+                <CopyCheck className={`w-3.5 h-3.5 ${connection.settings?.duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-amber-400'}`} />
+                <span>
+                  {connection.settings?.duplicateAction === 'delete_existing' ? 'ضد تکرار و جایگزینی (' : 'ضد تکرار فعال ('}
+                  {(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenSettings(connection)}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                title="سیستم جلوگیری از پست‌های تکراری غیرفعال است"
+              >
+                <CopyCheck className="w-3.5 h-3.5 text-slate-500" />
+                <span>ضد تکرار غیرفعال</span>
+              </button>
+            )
           )}
 
           {hasCustomSettings && (
@@ -251,6 +294,63 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* Multi-Channel Destinations Breakdown Box */}
+      <div className="mb-4 p-3.5 rounded-2xl neu-inset bg-slate-900/60 border border-white/5 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+            <Layers className="w-4 h-4 text-yellow-400" />
+            <span>کانال‌ها و مقصد‌های متصل به این مانیتورینگ:</span>
+          </div>
+          <button
+            onClick={() => onOpenSettings(connection)}
+            className="text-[11px] text-yellow-400 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>+ ویرایش مقاصد</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          {/* Telegram Destination */}
+          <div className="px-2.5 py-1 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 flex items-center gap-1.5 font-mono">
+            <Bot className="w-3.5 h-3.5 text-blue-400" />
+            <span>تلگرام:</span>
+            <span className="font-bold text-white">{connection.targetChannel}</span>
+          </div>
+
+          {/* Bale Destination */}
+          {isBaleActive && (
+            <div className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 font-mono">
+              <span className="text-emerald-400 font-extrabold">🇮🇷 بله:</span>
+              <span className="font-bold text-white">{baleTarget || 'فعال'}</span>
+            </div>
+          )}
+
+          {/* X (Twitter) Destinations */}
+          {isXActive && xHandles && (
+            xHandles.split(',').map((h, idx) => {
+              const handleClean = h.trim();
+              if (!handleClean) return null;
+              return (
+                <div key={idx} className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 flex items-center gap-1.5 font-mono">
+                  <Twitter className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>ایکس 𝕏:</span>
+                  <span className="font-bold text-white dir-ltr">{handleClean}</span>
+                </div>
+              );
+            })
+          )}
+
+          {/* Web Destination */}
+          {isWebActive && webTarget && (
+            <div className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center gap-1.5 font-mono">
+              <Globe className="w-3.5 h-3.5 text-purple-400" />
+              <span>وب‌سایت:</span>
+              <span className="font-bold text-white dir-ltr truncate max-w-[200px]">{webTarget}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error Message if any */}
