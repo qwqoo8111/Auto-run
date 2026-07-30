@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap, Key, ArrowUp, PlusCircle } from 'lucide-react';
 import { TelegramConnection, CreateConnectionDTO } from '../types';
-import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, AutoTrendConfig } from '../services/api';
+import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, triggerAutoTrendRunNow, AutoTrendConfig } from '../services/api';
 
 interface SocialWebImporterModalProps {
   isOpen: boolean;
@@ -465,11 +465,6 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
       return;
     }
 
-    if (autoConfig.enabled && !userAiApiKey.trim()) {
-      setStatusMessage({ type: 'error', text: 'ورود کلید API اختصاصی هوش مصنوعی جهت فعال‌سازی ارسال خودکار ترندها الزامی است.' });
-      return;
-    }
-
     const intervalVal = Math.max(0.05, parseFloat(customIntervalInput) || 24);
 
     setIsSavingAuto(true);
@@ -502,6 +497,51 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         });
       } else {
         setStatusMessage({ type: 'error', text: 'خطا در ذخیره تنظیمات ارسال خودکار.' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'خطا در ارتباط با سرور.' });
+    } finally {
+      setIsSavingAuto(false);
+    }
+  };
+
+  const handleRunAutoNow = async () => {
+    const { botToken, targetChannel } = getTargetCredentials();
+    if (!botToken || !targetChannel) {
+      setStatusMessage({ type: 'error', text: 'برای اجرا و تست فوری، توکن ربات و کانال مقصد الزامی است.' });
+      return;
+    }
+
+    setIsSavingAuto(true);
+    setStatusMessage(null);
+
+    try {
+      const intervalVal = Math.max(0.05, parseFloat(customIntervalInput) || 24);
+      const payload: AutoTrendConfig = {
+        ...autoConfig,
+        enabled: true,
+        connId: selectedConnId,
+        botToken: botToken || autoConfig.botToken,
+        targetChannel: targetChannel || autoConfig.targetChannel,
+        topic: trendTopic.trim(),
+        countPerRun: trendCount,
+        intervalHours: intervalVal,
+        combineIntoSinglePost: combineIntoSinglePost,
+        apiKey: userAiApiKey.trim(),
+        provider: userAiProvider,
+      };
+
+      await saveAutoTrendConfig(payload);
+
+      const res = await triggerAutoTrendRunNow();
+      if (res.ok) {
+        if (res.config) setAutoConfig(res.config);
+        setStatusMessage({
+          type: 'success',
+          text: `⚡ ${res.message || `ارسال فوری ترندها به کانال ${targetChannel} با موفقیت اجرا شد.`}`,
+        });
+      } else {
+        setStatusMessage({ type: 'error', text: res.message || 'خطا در اجرای فوری ارسال ترندها.' });
       }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'خطا در ارتباط با سرور.' });
@@ -1221,18 +1261,35 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                   <span>وضعیت ارسال خودکار: {autoConfig.enabled ? `فعال (هر ${customIntervalInput} ساعت)` : 'غیرفعال'}</span>
                 </div>
 
-                <button
-                  onClick={handleSaveAutoSettings}
-                  disabled={isSavingAuto}
-                  className="py-2.5 px-5 neu-button bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isSavingAuto ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Settings className="w-4 h-4" />
-                  )}
-                  <span>ذخیره تنظیمات ارسال خودکار</span>
-                </button>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    onClick={handleRunAutoNow}
+                    disabled={isSavingAuto}
+                    type="button"
+                    className="py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black text-xs rounded-xl shadow-lg shadow-orange-900/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingAuto ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Zap className="w-4 h-4 text-amber-200 fill-amber-200" />
+                    )}
+                    <span>🚀 تست و اجرای فوری ارسال ترندها به کانال</span>
+                  </button>
+
+                  <button
+                    onClick={handleSaveAutoSettings}
+                    disabled={isSavingAuto}
+                    type="button"
+                    className="py-2.5 px-4 neu-button bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingAuto ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Settings className="w-4 h-4" />
+                    )}
+                    <span>ذخیره تنظیمات ارسال خودکار</span>
+                  </button>
+                </div>
               </div>
 
               {/* Logs Drawer if present */}

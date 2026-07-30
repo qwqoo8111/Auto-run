@@ -443,6 +443,12 @@ export async function saveAutoTrendConfig(payload: AutoTrendConfig): Promise<{ o
   });
 }
 
+export async function triggerAutoTrendRunNow(): Promise<{ ok: boolean; message: string; config?: AutoTrendConfig }> {
+  return safeJsonFetch('/api/experimental/auto-trends/run-now', {
+    method: 'POST',
+  });
+}
+
 
 
 

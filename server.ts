@@ -1238,6 +1238,31 @@ async function deleteTelegramMessage(
   }
 }
 
+function convertMarkdownToTelegramHtml(text: string): string {
+  if (!text) return "";
+  // 1. Escape HTML entities
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // 2. Convert markdown bold **text** or __text__
+  html = html.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+  html = html.replace(/__(.*?)__/g, "<b>$1</b>");
+
+  // 3. Convert markdown italic *text* or _text_
+  html = html.replace(/\*(.*?)\*/g, "<i>$1</i>");
+  html = html.replace(/_(.*?)_/g, "<i>$1</i>");
+
+  // 4. Convert markdown code `code`
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // 5. Convert markdown links [text](url)
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+
+  return html;
+}
+
 async function sendTelegramMessage(
   botToken: string,
   targetChannel: string,
@@ -1245,6 +1270,13 @@ async function sendTelegramMessage(
 ): Promise<{ ok: boolean; messageId?: number; error?: string }> {
   try {
     const method = payload.method || "sendMessage";
+
+    if (payload.caption) {
+      payload.caption = convertMarkdownToTelegramHtml(payload.caption);
+    }
+    if (payload.text) {
+      payload.text = convertMarkdownToTelegramHtml(payload.text);
+    }
 
     const callApi = async (m: string, p: any) => {
       const extraParams: any = {};
@@ -3729,35 +3761,33 @@ app.post("/api/experimental/ai-trends", async (req, res) => {
     const { topic = "اخبار فوری و ترندهای داغ جهان در X", count = 3, apiKey: userApiKey } = req.body || {};
     const targetCount = Math.max(1, Math.min(Number(count) || 3, 30));
 
-    const apiKey = userApiKey?.trim().replace(/^["']|["']$/g, '') || "";
-    if (!apiKey) {
-      return res.status(400).json({ error: "وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. لطفاً کلید API خود را وارد کنید تا ترندهای X به‌روزرسانی شوند." });
-    }
+    const apiKey = userApiKey?.trim().replace(/^["']|["']$/g, '') || process.env.GEMINI_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
 
     // Step 1: Fetch live web news / X RSS snippets first to ensure real-time grounding
-    const rssItems = await fetchNewsRssForTopic(topic, targetCount + 2);
+    const rssItems = await fetchNewsRssForTopic(topic, targetCount + 5);
 
     let trends: any[] = [];
 
-    // Step 2: Try Gemini AI structuring with user-provided API key
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
+    // Step 2: Try Gemini AI structuring with provided API key or system GEMINI_API_KEY
+    if (apiKey) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
           },
-        },
-      });
+        });
 
-      const todayDateStr = new Date().toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
-      const todayIsoStr = new Date().toISOString().split('T')[0];
+        const todayDateStr = new Date().toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
+        const todayIsoStr = new Date().toISOString().split('T')[0];
 
-      const rssContext = rssItems.length > 0 
-        ? `اخبار و ترندهای زنده استخراج شده در ۲۴ ساعت گذشته (امروز):\n` + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nتاریخ خبر: ${r.pubDate || 'امروز'}\nلینک: ${r.link}`).join('\n---\n')
-        : "";
+        const rssContext = rssItems.length > 0 
+          ? `اخبار و ترندهای زنده استخراج شده در ۲۴ ساعت گذشته (امروز):\n` + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nتاریخ خبر: ${r.pubDate || 'امروز'}\nلینک: ${r.link}`).join('\n---\n')
+          : "";
 
-      const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
+        const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
 امروز: ${todayDateStr} (تاریخ میلادی: ${todayIsoStr})
 موضوع درخواست شده: "${topic}"
 
@@ -3780,54 +3810,55 @@ ${rssContext}
   }
 ]`;
 
-      let responseText = "";
-      for (const mName of ["gemini-3.6-flash", "gemini-flash-latest", "gemini-1.5-flash"]) {
-        try {
-          const res = await ai.models.generateContent({
-            model: mName,
-            contents: promptText,
-          });
-          if (res?.text) {
-            responseText = res.text;
-            break;
-          }
-        } catch (mErr) {
-          console.warn(`[AI-Trends] Model ${mName} failed, trying fallback...`, mErr);
-        }
-      }
-
-      let rawOutput = responseText;
-      rawOutput = rawOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-      try {
-        trends = JSON.parse(rawOutput);
-      } catch (_) {
-        const match = rawOutput.match(/\[\s*\{[\s\S]*\}\s*\]/);
-        if (match) {
+        let responseText = "";
+        for (const mName of ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]) {
           try {
-            trends = JSON.parse(match[0]);
-          } catch (__) {}
-        }
-      }
-
-      if (Array.isArray(trends)) {
-        trends = trends.map((t: any, idx: number) => {
-          const matchedRss = rssItems[idx];
-          const mUrls: string[] = Array.isArray(t.mediaUrls) ? t.mediaUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http')) : [];
-          if (mUrls.length === 0 && matchedRss?.imageUrl) {
-            mUrls.push(matchedRss.imageUrl);
+            const res = await ai.models.generateContent({
+              model: mName,
+              contents: promptText,
+            });
+            if (res?.text) {
+              responseText = res.text;
+              break;
+            }
+          } catch (mErr) {
+            console.warn(`[AI-Trends] Model ${mName} failed, trying fallback...`, mErr);
           }
-          return {
-            ...t,
-            mediaUrls: mUrls,
-          };
-        });
+        }
+
+        let rawOutput = responseText;
+        rawOutput = rawOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        try {
+          trends = JSON.parse(rawOutput);
+        } catch (_) {
+          const match = rawOutput.match(/\[\s*\{[\s\S]*\}\s*\]/);
+          if (match) {
+            try {
+              trends = JSON.parse(match[0]);
+            } catch (__) {}
+          }
+        }
+
+        if (Array.isArray(trends)) {
+          trends = trends.map((t: any, idx: number) => {
+            const matchedRss = rssItems[idx];
+            const mUrls: string[] = Array.isArray(t.mediaUrls) ? t.mediaUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http')) : [];
+            if (mUrls.length === 0 && matchedRss?.imageUrl) {
+              mUrls.push(matchedRss.imageUrl);
+            }
+            return {
+              ...t,
+              mediaUrls: mUrls,
+            };
+          });
+        }
+      } catch (aiErr: any) {
+        console.warn("Gemini AI trends generation bypassed due to quota/error:", aiErr?.message || aiErr);
       }
-    } catch (aiErr: any) {
-      console.warn("Gemini AI trends generation bypassed due to quota/error:", aiErr?.message || aiErr);
     }
 
-    // Step 3: Fallback generator if Gemini returned empty or hit 429 quota limit
+    // Step 3: Fallback generator if Gemini returned empty or hit quota limit
     if (!Array.isArray(trends) || trends.length === 0) {
       if (rssItems.length > 0) {
         trends = rssItems.slice(0, targetCount).map((item, idx) => {
@@ -3944,6 +3975,8 @@ interface AutoTrendConfigData {
   combineIntoSinglePost?: boolean;
   apiKey?: string;
   provider?: string;
+  model?: string;
+  customBaseUrl?: string;
   lastRunAt?: string | null;
   nextRunAt?: string | null;
   postedTrendTitles?: string[];
@@ -3985,28 +4018,20 @@ function saveAutoTrendConfigData(config: AutoTrendConfigData) {
 
 let autoTrendConfig = loadAutoTrendConfig();
 
-async function runAutoTrendSchedulerWorker() {
-  if (!autoTrendConfig.enabled) return;
-  if (!autoTrendConfig.botToken || !autoTrendConfig.targetChannel) return;
-
-  const userApiKey = autoTrendConfig.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
-  if (!userApiKey) {
-    console.warn("[AutoTrendScheduler] کلید API اختصاصی هوش مصنوعی کاربر تنظیم نشده است. ارسال خودکار ترندها متوقف شد.");
-    const logEntry = {
-      time: new Date().toLocaleTimeString('fa-IR'),
-      status: 'error' as const,
-      message: 'خطا: کلید API اختصاصی هوش مصنوعی کاربر تنظیم نشده است. لطفاً کلید API خود را در بخش تنظیمات ترندها وارد نمایید.',
-    };
-    autoTrendConfig.logs = [logEntry, ...(autoTrendConfig.logs || [])].slice(0, 50);
-    saveAutoTrendConfigData(autoTrendConfig);
+async function runAutoTrendSchedulerWorker(forceRun: boolean = false) {
+  if (!autoTrendConfig.enabled && !forceRun) return;
+  if (!autoTrendConfig.botToken || !autoTrendConfig.targetChannel) {
+    console.warn("[AutoTrendScheduler] Bot token or target channel missing.");
     return;
   }
+
+  const userApiKey = autoTrendConfig.apiKey?.trim().replace(/^["']|["']$/g, '') || process.env.GEMINI_API_KEY?.trim().replace(/^["']|["']$/g, '') || "";
 
   const now = Date.now();
   const lastRun = autoTrendConfig.lastRunAt ? new Date(autoTrendConfig.lastRunAt).getTime() : 0;
   const intervalMs = (autoTrendConfig.intervalHours || 24) * 3600 * 1000;
 
-  if (now - lastRun < intervalMs) {
+  if (!forceRun && now - lastRun < intervalMs) {
     return; // Not time yet
   }
 
@@ -4018,16 +4043,17 @@ async function runAutoTrendSchedulerWorker() {
     const rssItems = await fetchNewsRssForTopic(topic, count + 5);
 
     let trends: any[] = [];
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: userApiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-      });
-      const rssContext = rssItems.length > 0 
-        ? "اطلاعات زنده استخراج شده از وب:\n" + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nلینک: ${r.link}`).join('\n---\n')
-        : "";
+    if (userApiKey) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: userApiKey,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+        });
+        const rssContext = rssItems.length > 0 
+          ? "اطلاعات زنده استخراج شده از وب:\n" + rssItems.map((r, i) => `${i + 1}. تیتر: ${r.title}\nمنبع/توضیح: ${r.snippet}\nلینک: ${r.link}`).join('\n---\n')
+          : "";
 
-      const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
+        const promptText = `تو یک خبرنگار و جستجوگر هوشمند ترندهای جهانی در شبکه اجتماعی X (توییتر) و وب هستی.
 موضوع درخواست شده: "${topic}"
 ${rssContext}
 تعداد ${count} موضوع/توییت ترند برتر مرتبط با این موضوع را استخراج و به شکل پست تلگرامی جذاب آماده کن.
@@ -4044,23 +4070,39 @@ ${rssContext}
   }
 ]`;
 
-      let responseText = "";
-      for (const mName of ["gemini-3.6-flash", "gemini-flash-latest", "gemini-1.5-flash"]) {
-        try {
-          const res = await ai.models.generateContent({
-            model: mName,
-            contents: promptText,
-          });
-          if (res?.text) {
-            responseText = res.text;
-            break;
-          }
-        } catch (mErr) {}
-      }
+        let responseText = "";
+        for (const mName of ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]) {
+          try {
+            const res = await ai.models.generateContent({
+              model: mName,
+              contents: promptText,
+            });
+            if (res?.text) {
+              responseText = res.text;
+              break;
+            }
+          } catch (mErr) {}
+        }
 
-      let rawOutput = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      trends = JSON.parse(rawOutput);
-    } catch (e) {
+        let rawOutput = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        trends = JSON.parse(rawOutput);
+
+        if (Array.isArray(trends)) {
+          trends = trends.map((t: any, idx: number) => {
+            const matchedRss = rssItems[idx];
+            const mUrls: string[] = Array.isArray(t.mediaUrls) ? t.mediaUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http')) : [];
+            if (mUrls.length === 0 && matchedRss?.imageUrl) {
+              mUrls.push(matchedRss.imageUrl);
+            }
+            return { ...t, mediaUrls: mUrls };
+          });
+        }
+      } catch (e) {
+        console.warn("[AutoTrendScheduler] Gemini error, using RSS fallback:", e);
+      }
+    }
+
+    if (!Array.isArray(trends) || trends.length === 0) {
       if (rssItems.length > 0) {
         const cleanTag = topic.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, '_');
         trends = rssItems.slice(0, count).map((item, idx) => ({
@@ -4069,6 +4111,7 @@ ${rssContext}
           originalSummary: item.snippet,
           telegramText: `🔥 **ترند داغ در X و وب:** ${item.title}\n\n📌 **موضوع:** ${topic}\n\n${item.snippet || item.title}\n\n🌐 **لینک منبع:** ${item.link}\n\n#توییتر #ترند_روز #${cleanTag}`,
           sourceUrl: item.link,
+          mediaUrls: item.imageUrl ? [item.imageUrl] : [],
         }));
       }
     }
@@ -4110,16 +4153,36 @@ ${rssContext}
         // N separate posts
         for (const item of trends.slice(0, count)) {
           if (!item.telegramText) continue;
-          if (history.includes(item.title)) continue;
 
-          const sendRes = await sendTelegramMessage(autoTrendConfig.botToken, targetChannel, {
+          let sendPayload: any = {
             method: "sendMessage",
             text: item.telegramText,
-          });
+          };
+
+          if (Array.isArray(item.mediaUrls) && item.mediaUrls.length > 0) {
+            const validMedias = item.mediaUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http'));
+            if (validMedias.length === 1) {
+              const mUrl = validMedias[0];
+              const isVideo = /\.mp4|\.mov|\.webm|video|ext_tw_video/i.test(mUrl);
+              sendPayload = {
+                method: isVideo ? "sendVideo" : "sendPhoto",
+                [isVideo ? "video" : "photo"]: mUrl,
+                caption: item.telegramText,
+              };
+            } else if (validMedias.length > 1) {
+              sendPayload = {
+                method: "sendMediaGroup",
+                mediaItems: validMedias.map((u: string) => ({ type: /\.mp4|\.mov|\.webm/i.test(u) ? 'video' : 'photo', url: u })),
+                caption: item.telegramText,
+              };
+            }
+          }
+
+          const sendRes = await sendTelegramMessage(autoTrendConfig.botToken, targetChannel, sendPayload);
 
           if (sendRes.ok) {
             postedCount++;
-            history.push(item.title);
+            if (item.title) history.push(item.title);
             if (history.length > 100) history.shift();
           }
         }
@@ -4133,30 +4196,30 @@ ${rssContext}
         ? `تعداد ${trends.length} ترند به صورت ۱ پیام خلاصه به کانال ${targetChannel} ارسال شد.`
         : `تعداد ${postedCount} ترند به کانال ${targetChannel} با موفقیت ارسال شد.`;
       autoTrendConfig.logs = [
-        { time: new Date().toISOString(), status: 'success', message: logMsg },
-        ...(autoTrendConfig.logs || []).slice(0, 19)
+        { time: new Date().toLocaleTimeString('fa-IR'), status: 'success', message: logMsg },
+        ...(autoTrendConfig.logs || []).slice(0, 49)
       ];
       saveAutoTrendConfigData(autoTrendConfig);
     }
   } catch (err: any) {
     console.error("[AutoTrendScheduler] Worker error:", err);
     autoTrendConfig.logs = [
-      { time: new Date().toISOString(), status: 'error', message: `خطا در ارسال خودکار: ${err.message}` },
-      ...(autoTrendConfig.logs || []).slice(0, 19)
+      { time: new Date().toLocaleTimeString('fa-IR'), status: 'error', message: `خطا در ارسال خودکار: ${err.message}` },
+      ...(autoTrendConfig.logs || []).slice(0, 49)
     ];
     saveAutoTrendConfigData(autoTrendConfig);
   }
 }
 
 // Background poll every 60 seconds
-setInterval(runAutoTrendSchedulerWorker, 60000);
+setInterval(() => runAutoTrendSchedulerWorker(false), 60000);
 
 app.get("/api/experimental/auto-trends", (req, res) => {
   res.json({ ok: true, config: autoTrendConfig });
 });
 
 app.post("/api/experimental/auto-trends", (req, res) => {
-  const { enabled, connId, botToken, targetChannel, topic, intervalHours, countPerRun, combineIntoSinglePost } = req.body || {};
+  const { enabled, connId, botToken, targetChannel, topic, intervalHours, countPerRun, combineIntoSinglePost, apiKey, provider, model, customBaseUrl } = req.body || {};
   const isEnabled = Boolean(enabled);
   const interval = Math.max(0.05, Number(intervalHours) || 24);
   const count = Math.max(1, Math.min(Number(countPerRun) || 3, 30));
@@ -4171,15 +4234,35 @@ app.post("/api/experimental/auto-trends", (req, res) => {
     intervalHours: interval,
     countPerRun: count,
     combineIntoSinglePost: Boolean(combineIntoSinglePost),
+    apiKey: apiKey !== undefined ? apiKey.trim() : autoTrendConfig.apiKey,
+    provider: provider !== undefined ? provider : autoTrendConfig.provider,
+    model: model !== undefined ? model : autoTrendConfig.model,
+    customBaseUrl: customBaseUrl !== undefined ? customBaseUrl : autoTrendConfig.customBaseUrl,
     nextRunAt: isEnabled ? new Date(Date.now() + Math.round(interval * 3600 * 1000)).toISOString() : null,
   };
   saveAutoTrendConfigData(autoTrendConfig);
 
   if (isEnabled) {
-    runAutoTrendSchedulerWorker().catch(console.error);
+    runAutoTrendSchedulerWorker(true).catch(console.error);
   }
 
   res.json({ ok: true, config: autoTrendConfig });
+});
+
+app.post("/api/experimental/auto-trends/run-now", async (req, res) => {
+  try {
+    if (!autoTrendConfig.botToken || !autoTrendConfig.targetChannel) {
+      return res.status(400).json({ error: "لطفاً ابتدا توکن ربات و کانال مقصد را تنظیم نمایید." });
+    }
+    await runAutoTrendSchedulerWorker(true);
+    return res.json({
+      ok: true,
+      message: `تست و ارسال فوری ترندهای X به کانال ${autoTrendConfig.targetChannel} با موفقیت اجرا گردید!`,
+      config: autoTrendConfig,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در اجرای فوری: ${err.message}` });
+  }
 });
 
 // In-memory OTP store for email verification
