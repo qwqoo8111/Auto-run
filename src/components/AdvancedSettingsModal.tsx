@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { 
   X, Plus, Trash2, Save, Sliders, Sparkles, CheckCircle2, RefreshCw, 
   Eye, Replace, FileText, Filter, Bot, ShieldCheck, Tag, Link2, Globe, Cpu, Key, Lock, Crown,
-  CopyCheck, ShieldAlert, Activity, Twitter
+  CopyCheck, ShieldAlert, Activity, Twitter, ArrowUp, ArrowDown, Layers
 } from 'lucide-react';
-import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User } from '../types';
+import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User, AiFallbackItem } from '../types';
 import { updateConnectionSettings, testAiApi, testBaleBot, cleanDuplicates } from '../services/api';
 
 interface AdvancedSettingsModalProps {
@@ -25,6 +25,25 @@ const PROVIDERS: {
   keyTip: string;
   models: { id: string; label: string }[];
 }[] = [
+  {
+    id: 'openrouter',
+    name: 'OpenRouter (اوپن‌روتر)',
+    badge: 'دسترسی به تمام مدل‌های دنیا',
+    icon: '🔮',
+    color: 'border-indigo-500/30 text-indigo-300 bg-indigo-950/20',
+    keyLink: 'https://openrouter.ai/keys',
+    keyTip: 'کلید اختصاصی از OpenRouter.ai (پشتیبانی از تمام هوش‌های مصنوعی)',
+    models: [
+      { id: 'openrouter/auto', label: 'OpenRouter Auto (انتخاب اتوماتیک بهترین مدل)' },
+      { id: 'google/gemini-2.0-flash-001', label: 'Google Gemini 2.0 Flash (از طریق OpenRouter)' },
+      { id: 'anthropic/claude-3.5-sonnet', label: 'Anthropic Claude 3.5 Sonnet (از طریق OpenRouter)' },
+      { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat V3 (از طریق OpenRouter)' },
+      { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (مدل استدلالی)' },
+      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Meta Llama 3.3 70B' },
+      { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini (از طریق OpenRouter)' },
+      { id: 'custom', label: 'نام مدل سفارشی در OpenRouter (تایپ دستی)' },
+    ],
+  },
   {
     id: 'gemini',
     name: 'Google Gemini',
@@ -83,17 +102,34 @@ const PROVIDERS: {
     ],
   },
   {
+    id: 'openrouter',
+    name: 'OpenRouter AI',
+    badge: 'دسترسی جامع به همه مدل‌ها',
+    icon: '🚀',
+    color: 'border-violet-500/30 text-violet-300 bg-violet-950/20',
+    keyLink: 'https://openrouter.ai/keys',
+    keyTip: 'کلید API جامع از پلتفرم OpenRouter.ai',
+    models: [
+      { id: 'openrouter/auto', label: 'OpenRouter Auto (مسیریابی خودکار به بهترین مدل)' },
+      { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet (OpenRouter)' },
+      { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (OpenRouter)' },
+      { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (OpenRouter)' },
+      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B Instruct' },
+      { id: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash (OpenRouter)' },
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenRouter)' },
+      { id: 'custom', label: 'نام مدل سفارشی (تایپ دستی)' },
+    ],
+  },
+  {
     id: 'custom_openai',
-    name: 'سرویس دلخواه / OpenRouter / Groq',
+    name: 'سرویس دلخواه / Groq / Ollama',
     badge: 'API استاندارد OpenAI',
     icon: '🌐',
     color: 'border-blue-500/30 text-blue-300 bg-blue-950/20',
     keyLink: 'https://openrouter.ai/keys',
-    keyTip: 'اتصال به OpenRouter, Groq, Together, Ollama یا سرور شخصی',
+    keyTip: 'اتصال به Groq, Together, Ollama یا سرور شخصی',
     models: [
-      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'OpenRouter: Llama 3.3 70B' },
       { id: 'llama-3.3-70b-versatile', label: 'Groq: Llama 3.3 70B Versatile' },
-      { id: 'deepseek/deepseek-r1', label: 'OpenRouter: DeepSeek R1' },
       { id: 'custom', label: 'نام مدل سفارشی دلخواه (تایپ دستی)' },
     ],
   },
@@ -116,6 +152,10 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [aiModel, setAiModel] = useState<string>('gemini-3.6-flash');
   const [aiCustomBaseUrl, setAiCustomBaseUrl] = useState<string>('https://openrouter.ai/api/v1');
   const [customModelInput, setCustomModelInput] = useState<string>('');
+
+  // AI Fallback Chain State
+  const [enableAiFallbackChain, setEnableAiFallbackChain] = useState<boolean>(false);
+  const [aiFallbackChain, setAiFallbackChain] = useState<AiFallbackItem[]>([]);
 
   const [replacements, setReplacements] = useState<TextReplacementRule[]>([]);
   const [signature, setSignature] = useState<string>('');
@@ -179,6 +219,9 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setAiModel(loadedModel);
       setAiCustomBaseUrl(s.aiCustomBaseUrl || 'https://openrouter.ai/api/v1');
 
+      setEnableAiFallbackChain(!!s.enableAiFallbackChain);
+      setAiFallbackChain(s.aiFallbackChain || []);
+
       setReplacements(s.replacements || []);
       setSignature(s.signature !== undefined ? s.signature : `🆔 ${connection.targetChannel}`);
       setRemoveSourceLinks(s.removeSourceLinks !== undefined ? s.removeSourceLinks : true);
@@ -201,9 +244,19 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setEnableWeb(!!s.enableWeb || !!connection.enableWeb);
       setWebTargetUrl(s.webTargetUrl || connection.webTargetUrl || '');
 
-      setSampleText(
-        `پست جدید در کانال ${connection.sourceChannel}\nبرای خرید و ثبت سفارش به آیدی ${connection.sourceChannel} پیام دهید.\nلینک کانال: https://t.me/${connection.sourceChannel.replace('@', '')}\n#فروشگاه #تخفیف`
-      );
+      if (isTwitterSource) {
+        setSampleText(
+          `توییت جدید از ${connection.sourceChannel}:\nOur team is rolling out new updates today! Read more at https://t.co/xyz123\n#Twitter #Tech`
+        );
+      } else if (isWebsiteSource) {
+        setSampleText(
+          `خبر جدید در وب‌سایت ${connection.sourceChannel}:\nگزارش‌های تازه نشان می‌دهد که مطالب جدید منتشر شده است.\nلینک مطلب: https://example.com/news/100`
+        );
+      } else {
+        setSampleText(
+          `پست جدید در کانال ${connection.sourceChannel}\nبرای خرید و ثبت سفارش به آیدی ${connection.sourceChannel} پیام دهید.\nلینک کانال: https://t.me/${connection.sourceChannel.replace('@', '')}\n#فروشگاه #تخفیف`
+        );
+      }
     }
   }, [connection]);
 
@@ -263,6 +316,51 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     ]);
   };
 
+  const handleAddFallbackItem = () => {
+    setAiFallbackChain([
+      ...aiFallbackChain,
+      {
+        id: `fallback_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        provider: 'openrouter',
+        apiKey: '',
+        model: 'openrouter/auto',
+        customBaseUrl: 'https://openrouter.ai/api/v1',
+      },
+    ]);
+  };
+
+  const handleRemoveFallbackItem = (id: string) => {
+    setAiFallbackChain(aiFallbackChain.filter((item) => item.id !== id));
+  };
+
+  const handleFallbackItemChange = (id: string, field: keyof AiFallbackItem, value: any) => {
+    setAiFallbackChain(
+      aiFallbackChain.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, [field]: value };
+          if (field === 'provider') {
+            const pObj = PROVIDERS.find((p) => p.id === value);
+            if (pObj && pObj.models.length > 0) {
+              updated.model = pObj.models[0].id;
+            }
+          }
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleMoveFallbackItem = (index: number, direction: 'up' | 'down') => {
+    const newArr = [...aiFallbackChain];
+    const targetIdx = direction === 'up' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= newArr.length) return;
+    const temp = newArr[index];
+    newArr[index] = newArr[targetIdx];
+    newArr[targetIdx] = temp;
+    setAiFallbackChain(newArr);
+  };
+
   const handleRemoveRule = (id: string) => {
     setReplacements(replacements.filter((r) => r.id !== id));
   };
@@ -305,12 +403,22 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
 
     // 1. Clean Source Links & Handles
     if (removeSourceLinks || cleanTagsAndLinks) {
-      if (cleanSource) {
-        const sourceRegex = new RegExp(`@?${cleanSource}`, 'gi');
-        text = text.replace(sourceRegex, cleanTarget ? `@${cleanTarget}` : '');
+      if (isTwitterSource) {
+        text = text.replace(/https?:\/\/(x\.com|twitter\.com|t\.co)\/[^\s]+/gi, '');
+        if (cleanSource) {
+          const sourceRegex = new RegExp(`@?${cleanSource}`, 'gi');
+          text = text.replace(sourceRegex, '');
+        }
+      } else if (isWebsiteSource) {
+        text = text.replace(/https?:\/\/[^\s<]+/g, '');
+      } else {
+        if (cleanSource) {
+          const sourceRegex = new RegExp(`@?${cleanSource}`, 'gi');
+          text = text.replace(sourceRegex, cleanTarget ? `@${cleanTarget}` : '');
 
-        const tmeRegex = new RegExp(`https?:\\/\\/t\\.me\\/(s\\/)?${cleanSource}[^\\s]*`, 'gi');
-        text = text.replace(tmeRegex, '');
+          const tmeRegex = new RegExp(`https?:\\/\\/t\\.me\\/(s\\/)?${cleanSource}[^\\s]*`, 'gi');
+          text = text.replace(tmeRegex, '');
+        }
       }
 
       if (cleanTagsAndLinks) {
@@ -415,6 +523,8 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         aiModel: activeModel,
         aiCustomBaseUrl,
         geminiApiKey: aiProvider === 'gemini' ? aiApiKey : undefined,
+        enableAiFallbackChain,
+        aiFallbackChain: aiFallbackChain.filter((item) => item.apiKey.trim() !== ''),
         replacements: replacements.filter((r) => r.find.trim() !== ''),
         signature,
         removeSourceLinks,
@@ -461,11 +571,11 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             <div>
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 {isTwitterSource ? (
-                  <span>تنظیمات پیشرفته اختصاصی توییتر (X) & هوش مصنوعی</span>
+                  <span>تنظیمات پیشرفته اختصاصی توییتر (X)</span>
                 ) : isWebsiteSource ? (
-                  <span>تنظیمات پیشرفته اختصاصی وب‌سایت (RSS) & هوش مصنوعی</span>
+                  <span>تنظیمات پیشرفته اختصاصی وب‌سایت (RSS)</span>
                 ) : (
-                  <span>تنظیمات پیشرفته و فیلترهای هوشمند</span>
+                  <span>تنظیمات پیشرفته و فیلترهای هوشمند تلگرام</span>
                 )}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5 dir-ltr text-right">
@@ -485,703 +595,957 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto flex-1 space-y-6">
           
-          {/* Section 1: Content Filter (چه محتواهایی فوروارد شوند؟) */}
-          <div className="neu-inset p-4 space-y-3 border border-white/5">
-            <div className="flex items-center gap-2 text-xs font-bold text-yellow-400">
-              <Filter className="w-4 h-4" />
-              <span>چه محتواهایی فوروارد شوند؟ (فیلتر محتوا)</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-              {[
-                { id: 'all', title: 'همه محتواها', desc: 'متن، عکس، ویدیو، ویس و ویدیومسیج' },
-                { id: 'text_only', title: 'فقط متن‌ها', desc: 'بدون هیچ فایل یا رسانه' },
-                { id: 'text_and_photo', title: 'متن و عکس', desc: 'ارسال عکس و متن' },
-                { id: 'text_and_video', title: 'متن و ویدیو', desc: 'ارسال ویدیو و متن' },
-                { id: 'text_and_voice', title: 'متن و ویس (صوتی)', desc: 'ارسال پیام‌های صوتی و ویس' },
-                { id: 'text_and_video_note', title: 'متن و ویس ویدیو (دایره‌ای)', desc: 'ارسال ویدیوهای دایره‌ای (ویس ویدیو)' },
-                { id: 'voice_only', title: 'فقط ویس‌های صوتی', desc: 'فقط پیام صوتی/ویس' },
-                { id: 'video_note_only', title: 'فقط ویس ویدیو', desc: 'فقط ویدیو دایره‌ای' },
-              ].map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => setContentFilter(item.id as ContentFilter)}
-                  className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between ${
-                    contentFilter === item.id
-                      ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400 shadow-lg'
-                      : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  <span className="text-xs font-bold block">{item.title}</span>
-                  <span className="text-[10px] text-slate-500 mt-1">{item.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 2: Text Rewrite Mode (تغییر و بازنویسی متن پیام) */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-white">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>تغییر و بازنویسی متن پیام</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { id: 'none', label: 'بدون تغییر', desc: 'ارسال دقیق متن اصلی' },
-                { id: 'ai', label: 'بازنویسی با هوش مصنوعی', desc: 'بازنویسی هوشمند توسط Gemini' },
-                { id: 'replace', label: 'جایگزینی کلمات', desc: 'تغییر کلمات بر اساس قوانین شما' },
-              ].map((mode) => (
-                <button
-                  type="button"
-                  key={mode.id}
-                  onClick={() => setRewriteMode(mode.id as RewriteMode)}
-                  className={`p-3.5 rounded-xl border text-right transition-all ${
-                    rewriteMode === mode.id
-                      ? 'bg-blue-500/15 border-blue-400 text-blue-400 font-bold'
-                      : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  <div className="text-xs font-bold">{mode.label}</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">{mode.desc}</div>
-                </button>
-              ))}
-            </div>
-
-            {/* AI Custom Prompt & API Key Option if AI mode active */}
-            {rewriteMode === 'ai' && (
-              <div className="neu-inset p-4 space-y-4 rounded-xl border border-purple-500/30 bg-purple-950/15">
-                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                    <Bot className="w-4.5 h-4.5 text-purple-400" />
-                    <span>تنظیمات موتور هوش مصنوعی</span>
-                  </div>
-                  <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1">
-                    <span>{currentProviderConfig.icon}</span>
-                    <span>{currentProviderConfig.name}</span>
+          {/* ========================================================= */}
+          {/* 1. TWITTER (X) SPECIFIC ADVANCED SETTINGS                 */}
+          {/* ========================================================= */}
+          {isTwitterSource && (
+            <>
+              {/* Informational Banner */}
+              <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/25 text-sky-200 text-xs flex items-center gap-2.5">
+                <Twitter className="w-5 h-5 text-sky-400 shrink-0" />
+                <div>
+                  <span className="font-bold block text-sky-300">تنظیمات اختصاصی توییتر (X):</span>
+                  <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                    در این بخش می‌توانید پاکسازی لینک مبدأ و آیدی‌های توییتر را فعال کرده و لینک کانال تلگرام خود (امضا) را تنظیم نمایید.
                   </span>
                 </div>
-
-                {/* Provider Selector */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-purple-200">
-                    ۱. انتخاب سرویس هوش مصنوعی (Provider):
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                    {PROVIDERS.map((p) => (
-                      <button
-                        type="button"
-                        key={p.id}
-                        onClick={() => handleProviderSelect(p.id)}
-                        className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
-                          aiProvider === p.id
-                            ? 'bg-purple-600/25 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
-                            : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
-                        }`}
-                      >
-                        <span className="text-base">{p.icon}</span>
-                        <span className="text-xs font-bold line-clamp-1">{p.name}</span>
-                        <span className="text-[9px] text-purple-300/80 bg-purple-500/10 px-1.5 py-0.2 rounded-full border border-purple-500/20">
-                          {p.badge}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Model Selector */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-purple-200">
-                    ۲. انتخاب مدل هوش مصنوعی (Model):
-                  </label>
-                  <select
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
-                  >
-                    {currentProviderConfig.models.map((m) => (
-                      <option key={m.id} value={m.id} className="bg-slate-900 text-white">
-                        {m.label} ({m.id})
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* If custom model selected */}
-                  {aiModel === 'custom' && (
-                    <input
-                      type="text"
-                      value={customModelInput}
-                      onChange={(e) => setCustomModelInput(e.target.value)}
-                      placeholder="نام دقیق مدل را وارد کنید (مثلا: meta-llama/llama-3.3-70b-instruct)"
-                      className="w-full mt-1 bg-black/60 border border-purple-400 px-3 py-2 text-xs rounded-lg text-white placeholder-slate-500 focus:outline-none font-mono dir-ltr text-right"
-                    />
-                  )}
-                </div>
-
-                {/* Custom Base URL (Visible if custom_openai) */}
-                {aiProvider === 'custom_openai' && (
-                  <div className="space-y-1.5 bg-blue-950/20 p-2.5 rounded-lg border border-blue-500/30">
-                    <label className="block text-xs font-bold text-blue-300 flex items-center gap-1">
-                      <Globe className="w-3.5 h-3.5 text-blue-400" />
-                      <span>آدرس پایه API (Base URL):</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={aiCustomBaseUrl}
-                      onChange={(e) => setAiCustomBaseUrl(e.target.value)}
-                      placeholder="مثال: https://openrouter.ai/api/v1 یا https://api.groq.com/openai/v1"
-                      className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 font-mono dir-ltr text-right"
-                    />
-                  </div>
-                )}
-
-                {/* API Key Input */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-purple-200 flex items-center gap-1">
-                      <Key className="w-3.5 h-3.5 text-purple-400" />
-                      <span>کلید API Key اختصاصی کاربر ({currentProviderConfig.name}):</span>
-                      <span className="text-rose-400 font-bold">* (الزامی)</span>
-                    </label>
-                  </div>
-                  <input
-                    type="password"
-                    value={aiApiKey}
-                    onChange={(e) => setAiApiKey(e.target.value)}
-                    placeholder={
-                      aiProvider === 'gemini'
-                        ? 'AIzaSy... (کلید اختصاصی Gemini)'
-                        : aiProvider === 'openai'
-                        ? 'sk-proj-... (کلید اختصاصی OpenAI)'
-                        : aiProvider === 'deepseek'
-                        ? 'sk-... (کلید اختصاصی DeepSeek)'
-                        : aiProvider === 'claude'
-                        ? 'sk-ant-api03-... (کلید اختصاصی Claude)'
-                        : 'کلید API اختصاصی سرویس مورد نظر'
-                    }
-                    className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 font-mono dir-ltr text-right"
-                  />
-                  <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                    💡 <span className="text-purple-300">راهنما:</span> هر کاربر باید کلید API خود را وارد کند ➔
-                    <a
-                      href={currentProviderConfig.keyLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-yellow-400 underline hover:text-yellow-300 font-bold"
-                    >
-                      دریافت کلید API ({currentProviderConfig.keyTip})
-                    </a>
-                  </p>
-                </div>
-
-                {/* AI Prompt Input */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-purple-200">
-                    دستور سفارشی برای هوش مصنوعی (AI Prompt):
-                  </label>
-                  <input
-                    type="text"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="مثال: متن را با لحنی جذاب و پرمخاطب بازنویسی کن و هیچ لینک اضافه‌ای نزار"
-                    className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
-                  />
-                </div>
-
-                {/* Live Test AI Button */}
-                <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTestAi}
-                    disabled={testingAi}
-                    className="neu-btn-secondary px-3 py-2 text-xs font-bold text-purple-300 border-purple-500/30 flex items-center justify-center gap-1.5 hover:bg-purple-500/20"
-                  >
-                    {testingAi ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-300" />
-                        <span>در حال ارسال درخواست به {currentProviderConfig.name}...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                        <span>تست زنده عملکرد ({currentProviderConfig.name})</span>
-                      </>
-                    )}
-                  </button>
-                  <span className="text-[10px] text-slate-400 text-center sm:text-right">
-                    متن نمونه پایین کادر برای تست زنده استفاده می‌شود
-                  </span>
-                </div>
-
-                {/* AI Test Results */}
-                {aiTestResult && (
-                  <div className="p-3 bg-purple-900/30 border border-purple-500/30 rounded-xl space-y-1">
-                    <span className="text-[11px] font-bold text-purple-300 block">✨ پاسخ هوش مصنوعی ({currentProviderConfig.name}):</span>
-                    <p className="text-xs text-purple-100 whitespace-pre-wrap">{aiTestResult}</p>
-                  </div>
-                )}
-
-                {aiTestError && (
-                  <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl space-y-1 text-xs text-red-300">
-                    <span className="font-bold block">❌ خطا در اتصال به هوش مصنوعی:</span>
-                    <span>{aiTestError}</span>
-                  </div>
-                )}
               </div>
-            )}
 
-            {/* Word Replacement Rules Table if Replace mode active */}
-            {rewriteMode === 'replace' && (
-              <div className="neu-inset p-3.5 space-y-3 rounded-xl border border-blue-500/20">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-300">لیست قوانین جایگزینی کلمات:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleQuickAddSourceReplace}
-                      className="neu-btn-secondary px-2.5 py-1 text-[11px] font-semibold text-yellow-400"
-                    >
-                      + جایگزینی آیدی مبدأ با مقصد
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddRule}
-                      className="neu-btn-primary px-2.5 py-1 text-[11px] font-bold text-black flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>افزودن کلمه</span>
-                    </button>
-                  </div>
+              {/* 1. Remove Source Link Option */}
+              <div className="neu-inset p-4 rounded-xl border border-white/5 space-y-3">
+                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>تنظیمات پاکسازی لینک مبدأ توییتر</span>
                 </div>
 
-                {replacements.length === 0 ? (
-                  <div className="text-center text-xs text-slate-500 py-3">
-                    هیچ قانونی تعریف نشده است.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {replacements.map((rule, idx) => (
-                      <div key={rule.id} className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 w-4">{idx + 1}.</span>
-                        <input
-                          type="text"
-                          value={rule.find}
-                          onChange={(e) => handleRuleChange(rule.id, 'find', e.target.value)}
-                          placeholder="کلمه/عبارت مبدأ"
-                          className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-yellow-400 dir-ltr text-right"
-                        />
-                        <span className="text-slate-500 text-xs">➔</span>
-                        <input
-                          type="text"
-                          value={rule.replace}
-                          onChange={(e) => handleRuleChange(rule.id, 'replace', e.target.value)}
-                          placeholder="کلمه جدید (یا خالی برای حذف)"
-                          className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-blue-400 dir-ltr text-right"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveRule(rule.id)}
-                          className="p-1.5 text-red-400 hover:text-red-300"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Section 3: Source Cleanup Controls */}
-          <div className="neu-inset p-4 space-y-3 border border-white/5">
-            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" />
-              <span>تنظیمات پاکسازی لینک‌ها و آیدی‌های کانال مبدأ</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
-                <input
-                  type="checkbox"
-                  checked={removeSourceLinks}
-                  onChange={(e) => setRemoveSourceLinks(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-white block">حذف خودکار تمام لینک‌ها، منشن‌ها و آیدی‌های تلگرامی کانال مبدأ</span>
-                  <span className="text-slate-400 mt-0.5 block text-[11px]">
-                    جایگزینی یا حذف آیدی {connection.sourceChannel} و لینک‌های t.me مربوط به آن
-                  </span>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
-                <input
-                  type="checkbox"
-                  checked={cleanTagsAndLinks}
-                  onChange={(e) => setCleanTagsAndLinks(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-white block">پاکسازی کلی تمام تگ‌ها (#) و لینک‌های وب</span>
-                  <span className="text-slate-400 mt-0.5 block text-[11px]">
-                    حذف تمام لینک‌های اینترنتی و هشتگ‌های موجود در متن اصلی
-                  </span>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          {/* Section 3.5: Duplicate Detection & Prevention (تشخیص و پاکسازی پست‌های تکراری - مخصوص تلگرام) */}
-          {!isTwitterSource && !isWebsiteSource && (
-            <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
-                <div className="flex items-center gap-2">
-                  <CopyCheck className="w-5 h-5 text-amber-400" />
-                  <div>
-                    <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص و جلوگیـری از پست‌های تکراری</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      الگوریتم هوشمند سنجش شباهت محتوا و پاکسازی اتوماتیک پست‌های تکراری در کانال مقصد
-                    </p>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
+                <label className="flex items-start gap-3 neu-inset p-3.5 cursor-pointer hover:bg-white/5 transition-colors rounded-xl border border-white/5">
                   <input
                     type="checkbox"
-                    checked={preventDuplicates}
-                    onChange={(e) => setPreventDuplicates(e.target.checked)}
-                    className="w-4 h-4 accent-amber-400 rounded"
+                    checked={removeSourceLinks}
+                    onChange={(e) => setRemoveSourceLinks(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-emerald-400 rounded cursor-pointer"
                   />
-                  <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
+                  <div className="text-xs">
+                    <span className="font-bold text-white block">حذف لینک مبدأ (حذف لینک‌های توییتر، t.co و آیدی پیج مبدأ)</span>
+                    <span className="text-slate-400 mt-0.5 block text-[11px] leading-relaxed">
+                      با فعال بودن این گزینه، لینک‌های اختصاصی توییت (twitter.com / x.com / t.co) و آیدی حساب توییتر {connection.sourceChannel} از متن توییت پاکسازی می‌شوند تا لینک پیج مبدا یا لینکهای t.co در پیام نباشد.
+                    </span>
+                  </div>
                 </label>
               </div>
 
-              {preventDuplicates && (
-                <div className="space-y-4 animate-fadeIn pt-1">
-                  {/* Threshold Selection */}
-                  <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                        <span>۱. درصد آستانه تشخیص شباهت:</span>
-                      </label>
-                      <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
-                        {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
+              {/* Telegram Channel Link / Signature */}
+              <div className="space-y-2 neu-inset p-4 rounded-xl border border-white/5">
+                <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-yellow-400" />
+                  <span>امضا / لینک کانال تلگرام (که به انتهای توییت اضافه می‌شود):</span>
+                </label>
+                <div className="p-2 rounded-xl border border-white/10 bg-black/40">
+                  <textarea
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder={`مثال:\n🆔 ${connection.targetChannel}\n📢 عضویت در کانال: t.me/${connection.targetChannel.replace('@', '')}`}
+                    rows={3}
+                    className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  💡 این امضا (لینک کانال تلگرام شما) به انتهای تمامی توییت‌های استخراج شده از این حساب توییتر پیوست می‌گردد.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* ========================================================= */}
+          {/* 2. WEBSITE (RSS) SPECIFIC ADVANCED SETTINGS               */}
+          {/* ========================================================= */}
+          {isWebsiteSource && (
+            <>
+              <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/25 text-purple-200 text-xs flex items-center gap-2.5">
+                <Globe className="w-5 h-5 text-purple-400 shrink-0" />
+                <div>
+                  <span className="font-bold block text-purple-300">تنظیمات اختصاصی وب‌سایت (RSS):</span>
+                  <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
+                    تنظیم بازنویسی هوشمند اخبار با هوش مصنوعی، پاکسازی لینک‌های سایت مبدأ و افزودن امضای کانال تلگرام.
+                  </span>
+                </div>
+              </div>
+
+              {/* Text Rewrite Mode for Website */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>تغییر و بازنویسی خبرهای وب‌سایت</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { id: 'none', label: 'بدون تغییر', desc: 'ارسال دقیق متن خبر وب‌سایت' },
+                    { id: 'ai', label: 'بازنویسی با هوش مصنوعی', desc: 'خلاصه‌سازی و بازنویسی روان با AI' },
+                    { id: 'replace', label: 'جایگزینی کلمات', desc: 'تغییر کلمات بر اساس قوانین شما' },
+                  ].map((mode) => (
+                    <button
+                      type="button"
+                      key={mode.id}
+                      onClick={() => setRewriteMode(mode.id as RewriteMode)}
+                      className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
+                        rewriteMode === mode.id
+                          ? 'bg-blue-500/15 border-blue-400 text-blue-400 font-bold'
+                          : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{mode.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI Settings if AI mode active */}
+                {rewriteMode === 'ai' && (
+                  <div className="neu-inset p-4 space-y-4 rounded-xl border border-purple-500/30 bg-purple-950/15">
+                    <div className="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
+                      <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                        <Bot className="w-4.5 h-4.5 text-purple-400" />
+                        <span>تنظیمات موتور هوش مصنوعی برای اخبار</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1">
+                        <span>{currentProviderConfig.icon}</span>
+                        <span>{currentProviderConfig.name}</span>
                       </span>
                     </div>
 
-                    {/* Range Slider for granular sensitivity selection */}
-                    <div className="space-y-1">
-                      <input
-                        type="range"
-                        min={50}
-                        max={100}
-                        step={5}
-                        value={duplicateSimilarityThreshold}
-                        onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
-                        className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
-                      />
-                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                        <span>۵۰٪ (بسیار حساس)</span>
-                        <span>۸۰٪ (پیش‌فرض)</span>
-                        <span>۱۰۰٪ (کاملاً یکسان)</span>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        انتخاب سرویس هوش مصنوعی (Provider):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                        {PROVIDERS.map((p) => (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => handleProviderSelect(p.id)}
+                            className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                              aiProvider === p.id
+                                ? 'bg-purple-600/25 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
+                                : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
+                            }`}
+                          >
+                            <span className="text-base">{p.icon}</span>
+                            <span className="text-xs font-bold line-clamp-1">{p.name}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
 
-                    {/* Preset Buttons */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 pt-1">
-                      {[
-                        { val: 50, label: '۵۰٪', desc: 'خیلی حساس' },
-                        { val: 60, label: '۶۰٪', desc: 'حساسیت بالا' },
-                        { val: 70, label: '۷۰٪', desc: 'حساسیت متوسط' },
-                        { val: 80, label: '۸۰٪', desc: 'استاندارد' },
-                        { val: 90, label: '۹۰٪', desc: 'دقت بالا' },
-                        { val: 95, label: '۹۵٪', desc: 'بسیار دقیق' },
-                        { val: 100, label: '۱۰۰٪', desc: 'کاملاً عینا' },
-                      ].map((item) => (
-                        <button
-                          type="button"
-                          key={item.val}
-                          onClick={() => setDuplicateSimilarityThreshold(item.val)}
-                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                            duplicateSimilarityThreshold === item.val
-                              ? 'bg-amber-500/25 border-amber-400 text-amber-300 font-extrabold shadow-md scale-102'
-                              : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
-                          }`}
-                        >
-                          <span className="text-xs font-extrabold block">{item.label}</span>
-                          <span className="text-[9px] text-slate-400 block mt-0.5">{item.desc}</span>
-                        </button>
-                      ))}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        کلید API اختصاصی:
+                      </label>
+                      <input
+                        type="password"
+                        value={aiApiKey}
+                        onChange={(e) => setAiApiKey(e.target.value)}
+                        placeholder="کلید API خود را وارد کنید..."
+                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                      />
+                    </div>
+
+                    {/* Fallback Chain / Priority AI Configuration for Website */}
+                    <div className="pt-3 border-t border-purple-500/20 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={enableAiFallbackChain}
+                            onChange={(e) => setEnableAiFallbackChain(e.target.checked)}
+                            className="w-4 h-4 rounded text-purple-500 focus:ring-purple-400 bg-slate-900 border-white/20 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-purple-400" />
+                            <span>سوییچ خودکار و زنجیره هوش مصنوعی (Fallback & Priority Chain)</span>
+                          </span>
+                        </label>
+                        <span className="text-[10px] text-purple-300/80 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
+                          در صورت اتمام سهمیه یا خطای API اصلی
+                        </span>
+                      </div>
+
+                      {enableAiFallbackChain && (
+                        <div className="space-y-3 pt-2 animate-fadeIn">
+                          <p className="text-[11px] text-slate-300 leading-relaxed bg-black/30 p-2.5 rounded-xl border border-white/5">
+                            💡 راهنما: ابتدا هوش مصنوعی اصلی بالا اجرا می‌شود. در صورت بروز خطا، اتمام شارژ یا پاسخ ندادن API، سیستم به ترتیب اولویت‌های زیر سوییچ اتوماتیک می‌کند.
+                          </p>
+
+                          {aiFallbackChain.map((item, idx) => (
+                            <div key={item.id} className="p-3 rounded-xl bg-black/50 border border-purple-500/30 space-y-2.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-purple-300 border-b border-white/10 pb-1.5">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black flex items-center justify-center border border-purple-500/30">
+                                    {idx + 1}
+                                  </span>
+                                  <span>اولویت جایگزین #{idx + 1}</span>
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveFallbackItem(idx, 'up')}
+                                    disabled={idx === 0}
+                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
+                                    title="انتقال به بالا"
+                                  >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveFallbackItem(idx, 'down')}
+                                    disabled={idx === aiFallbackChain.length - 1}
+                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
+                                    title="انتقال به پایین"
+                                  >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFallbackItem(item.id)}
+                                    className="p-1 hover:bg-red-500/20 rounded text-red-400 cursor-pointer"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    سرویس هوش مصنوعی:
+                                  </label>
+                                  <select
+                                    value={item.provider}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'provider', e.target.value as AiProvider)}
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
+                                  >
+                                    {PROVIDERS.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.icon} {p.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    کلید API اختصاصی:
+                                  </label>
+                                  <input
+                                    type="password"
+                                    value={item.apiKey}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'apiKey', e.target.value)}
+                                    placeholder="کلید API جایگزین..."
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddFallbackItem}
+                            className="w-full py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4 text-purple-400" />
+                            <span>افزودن هوش مصنوعی جدید به زنجیره اولویت‌ها</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
+                )}
 
-                  {/* Dynamic Guarantee Notice */}
-                  <div className={`p-3 rounded-xl text-xs flex items-center gap-2.5 ${
-                    duplicateAction === 'delete_existing'
-                      ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
-                      : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'
-                  }`}>
-                    <ShieldCheck className={`w-5 h-5 shrink-0 ${duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-blue-400'}`} />
-                    <div>
-                      <span className="font-bold block">
-                        {duplicateAction === 'delete_existing'
-                          ? 'توضیحات جایگزینی خودکار پست تکراری:'
-                          : 'تضمین عدم ارسال پست‌های تکراری:'}
-                      </span>
-                      <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
-                        {duplicateAction === 'delete_existing'
-                          ? `هرگاه پست جدیدی با یکی از پست‌های قبلی کانال بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، پست قدیمی‌تر از کانال تلگرام حذف شده و پست جدید جایگزین می‌گردد.`
-                          : `پست‌های قدیمی کانال محفوظ می‌مانند. اگر پست جدیدی با پست‌های قبلی بیش از ${duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت داشته باشد، از ارسال آن جلوگیری خواهد شد.`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Target Channel Supervisor Banner */}
-                  <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs flex items-center gap-2.5">
-                    <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="font-bold block text-purple-300">
-                        ناظر یکپارچه کانال مقصد ({connection.targetChannel}):
-                      </span>
-                      <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
-                        ناظر سیستم تمام کانال‌های مبدأ متصل به <strong>{connection.targetChannel}</strong> را به‌صورت سراسری زیر نظر می‌گیرد. حتی اگر چند کانال مبدأ یک خبر یا پست یکسان را به صورت همزمان ارسال کنند، قفل ناظر کانال مقصد از ورود پست‌های همزمان یا تکراری به کانال شما جلوگیری خواهد کرد.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Duplicate Action Behavior */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-200">
-                      ۲. اقدام هنگام مواجهه با پست تکراری جدید:
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Word Replacements for website if replace mode active */}
+                {rewriteMode === 'replace' && (
+                  <div className="neu-inset p-4 space-y-3 rounded-xl border border-blue-500/30 bg-blue-950/15">
+                    <div className="flex items-center justify-between border-b border-blue-500/20 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+                        <Replace className="w-4 h-4 text-blue-400" />
+                        <span>جدول جایگزینی کلمات و عبارت‌های خبر</span>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setDuplicateAction('skip')}
-                        className="p-3.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-md text-right w-full"
+                        onClick={handleAddRule}
+                        className="neu-btn-primary px-2.5 py-1 text-[11px] font-bold text-black flex items-center gap-1"
                       >
-                        <span className="text-xs font-bold block flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                          <span>🚫 جلوگیرى از انتشار و عدم ارسال پست جدید (پیش‌فرض هوشمند)</span>
-                        </span>
-                        <span className="text-[11px] text-slate-300 block mt-1 leading-relaxed">
-                          از آپلود پست جدید تکراری در لحظه جلوگیری می‌شود و تمام پست‌های قبلی کانال بدون هیچ‌گونه دستکاری یا حذفی کاملاً سالم باقی می‌مانند.
-                        </span>
+                        <Plus className="w-3 h-3" />
+                        <span>افزودن کلمه</span>
                       </button>
                     </div>
-                  </div>
 
-                  {/* Media Check Option */}
-                  <label className="flex items-center gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                    {replacements.length === 0 ? (
+                      <div className="text-center text-xs text-slate-500 py-3">
+                        هیچ قانونی تعریف نشده است.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {replacements.map((rule, idx) => (
+                          <div key={rule.id} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 w-4">{idx + 1}.</span>
+                            <input
+                              type="text"
+                              value={rule.find}
+                              onChange={(e) => handleRuleChange(rule.id, 'find', e.target.value)}
+                              placeholder="کلمه/عبارت مبدأ"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-yellow-400 dir-ltr text-right"
+                            />
+                            <span className="text-slate-500 text-xs">➔</span>
+                            <input
+                              type="text"
+                              value={rule.replace}
+                              onChange={(e) => handleRuleChange(rule.id, 'replace', e.target.value)}
+                              placeholder="کلمه جدید (یا خالی برای حذف)"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-blue-400 dir-ltr text-right"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRule(rule.id)}
+                              className="p-1.5 text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Website Source Cleanup */}
+              <div className="neu-inset p-4 space-y-3 border border-white/5">
+                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>تنظیمات پاکسازی لینک‌های وب‌سایت مبدأ</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
                     <input
                       type="checkbox"
-                      checked={checkMediaDuplicate}
-                      onChange={(e) => setCheckMediaDuplicate(e.target.checked)}
-                      className="w-4 h-4 accent-amber-400 rounded"
+                      checked={removeSourceLinks}
+                      onChange={(e) => setRemoveSourceLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
                     />
                     <div className="text-xs">
-                      <span className="font-bold text-white block">بررسی و تطابق فایل‌های رسانه‌ای (عکس و ویدیو)</span>
+                      <span className="font-bold text-white block">حذف خودکار لینک‌های وب‌سایت مبدأ (URL)</span>
                       <span className="text-slate-400 mt-0.5 block text-[11px]">
-                        در صورت یکسان بودن تصویر یا ویدیوی دو پست، به عنوان پست تکراری شناسایی شده و بر اساس تنظیم فوق اقدام می‌شود.
+                        پاکسازی آدرس‌های URL وب‌سایت اصلی از متن خبر
                       </span>
                     </div>
                   </label>
 
-                  {/* Manual Scan and Clean Duplicates Button */}
-                  <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/30 space-y-2.5">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <span className="text-xs font-bold text-amber-300 block">پاکسازی فوری پست‌های تکراری موجود در کانال</span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">
-                          اسکن هوشمند تمام پست‌های منتقل‌شده قبلی در کانال مقصد و حذف موارد تکراری
+                  <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={cleanTagsAndLinks}
+                      onChange={(e) => setCleanTagsAndLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">پاکسازی کلی تمام کدهای HTML و هشتگ‌ها</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px]">
+                        حذف تمامی کدهای HTML و هشتگ‌های موجود در مقاله
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Website Signature */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-yellow-400" />
+                  <span>امضا / لینک کانال تلگرام به انتهای خبر وب‌سایت:</span>
+                </label>
+                <div className="neu-inset p-2 rounded-xl border border-white/5">
+                  <textarea
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder={`مثال:\n🆔 ${connection.targetChannel}`}
+                    rows={3}
+                    className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ========================================================= */}
+          {/* 3. TELEGRAM SPECIFIC ADVANCED SETTINGS                    */}
+          {/* ========================================================= */}
+          {!isTwitterSource && !isWebsiteSource && (
+            <>
+              {/* Section 1: Content Filter (چه محتواهایی فوروارد شوند؟) */}
+              <div className="neu-inset p-4 space-y-3 border border-white/5">
+                <div className="flex items-center gap-2 text-xs font-bold text-yellow-400">
+                  <Filter className="w-4 h-4" />
+                  <span>چه محتواهایی فوروارد شوند؟ (فیلتر محتوا)</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  {[
+                    { id: 'all', title: 'همه محتواها', desc: 'متن، عکس، ویدیو، ویس و ویدیومسیج' },
+                    { id: 'text_only', title: 'فقط متن‌ها', desc: 'بدون هیچ فایل یا رسانه' },
+                    { id: 'text_and_photo', title: 'متن و عکس', desc: 'ارسال عکس و متن' },
+                    { id: 'text_and_video', title: 'متن و ویدیو', desc: 'ارسال ویدیو و متن' },
+                    { id: 'text_and_voice', title: 'متن و ویس (صوتی)', desc: 'ارسال پیام‌های صوتی و ویس' },
+                    { id: 'text_and_video_note', title: 'متن و ویس ویدیو (دایره‌ای)', desc: 'ارسال ویدیوهای دایره‌ای (ویس ویدیو)' },
+                    { id: 'voice_only', title: 'فقط ویس‌های صوتی', desc: 'فقط پیام صوتی/ویس' },
+                    { id: 'video_note_only', title: 'فقط ویس ویدیو', desc: 'فقط ویدیو دایره‌ای' },
+                  ].map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => setContentFilter(item.id as ContentFilter)}
+                      className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between ${
+                        contentFilter === item.id
+                          ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400 shadow-lg'
+                          : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block">{item.title}</span>
+                      <span className="text-[10px] text-slate-500 mt-1">{item.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 2: Text Rewrite Mode (تغییر و بازنویسی متن پیام) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>تغییر و بازنویسی متن پیام</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { id: 'none', label: 'بدون تغییر', desc: 'ارسال دقیق متن اصلی' },
+                    { id: 'ai', label: 'بازنویسی با هوش مصنوعی', desc: 'بازنویسی هوشمند توسط Gemini' },
+                    { id: 'replace', label: 'جایگزینی کلمات', desc: 'تغییر کلمات بر اساس قوانین شما' },
+                  ].map((mode) => (
+                    <button
+                      type="button"
+                      key={mode.id}
+                      onClick={() => setRewriteMode(mode.id as RewriteMode)}
+                      className={`p-3.5 rounded-xl border text-right transition-all ${
+                        rewriteMode === mode.id
+                          ? 'bg-blue-500/15 border-blue-400 text-blue-400 font-bold'
+                          : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{mode.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI Custom Prompt & API Key Option if AI mode active */}
+                {rewriteMode === 'ai' && (
+                  <div className="neu-inset p-4 space-y-4 rounded-xl border border-purple-500/30 bg-purple-950/15">
+                    <div className="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
+                      <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                        <Bot className="w-4.5 h-4.5 text-purple-400" />
+                        <span>تنظیمات موتور هوش مصنوعی</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1">
+                        <span>{currentProviderConfig.icon}</span>
+                        <span>{currentProviderConfig.name}</span>
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        ۱. انتخاب سرویس هوش مصنوعی (Provider):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                        {PROVIDERS.map((p) => (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => handleProviderSelect(p.id)}
+                            className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                              aiProvider === p.id
+                                ? 'bg-purple-600/25 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
+                                : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
+                            }`}
+                          >
+                            <span className="text-base">{p.icon}</span>
+                            <span className="text-xs font-bold line-clamp-1">{p.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        ۲. کلید API اختصاصی:
+                      </label>
+                      <input
+                        type="password"
+                        value={aiApiKey}
+                        onChange={(e) => setAiApiKey(e.target.value)}
+                        placeholder="کلید API خود را وارد کنید..."
+                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                      />
+                    </div>
+
+                    {/* Fallback Chain / Priority AI Configuration */}
+                    <div className="pt-3 border-t border-purple-500/20 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={enableAiFallbackChain}
+                            onChange={(e) => setEnableAiFallbackChain(e.target.checked)}
+                            className="w-4 h-4 rounded text-purple-500 focus:ring-purple-400 bg-slate-900 border-white/20 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-purple-400" />
+                            <span>سوییچ خودکار و زنجیره هوش مصنوعی (Fallback & Priority Chain)</span>
+                          </span>
+                        </label>
+                        <span className="text-[10px] text-purple-300/80 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
+                          در صورت اتمام سهمیه یا خطای API اصلی
                         </span>
                       </div>
 
+                      {enableAiFallbackChain && (
+                        <div className="space-y-3 pt-2 animate-fadeIn">
+                          <p className="text-[11px] text-slate-300 leading-relaxed bg-black/30 p-2.5 rounded-xl border border-white/5">
+                            💡 راهنما: ابتدا هوش مصنوعی اصلی بالا اجرا می‌شود. در صورت بروز خطا، اتمام شارژ یا پاسخ ندادن API، سیستم به ترتیب اولویت‌های زیر سوییچ اتوماتیک می‌کند.
+                          </p>
+
+                          {aiFallbackChain.map((item, idx) => (
+                            <div key={item.id} className="p-3 rounded-xl bg-black/50 border border-purple-500/30 space-y-2.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-purple-300 border-b border-white/10 pb-1.5">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black flex items-center justify-center border border-purple-500/30">
+                                    {idx + 1}
+                                  </span>
+                                  <span>اولویت جایگزین #{idx + 1}</span>
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveFallbackItem(idx, 'up')}
+                                    disabled={idx === 0}
+                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
+                                    title="انتقال به بالا"
+                                  >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveFallbackItem(idx, 'down')}
+                                    disabled={idx === aiFallbackChain.length - 1}
+                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
+                                    title="انتقال به پایین"
+                                  >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFallbackItem(item.id)}
+                                    className="p-1 hover:bg-red-500/20 rounded text-red-400 cursor-pointer"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    سرویس هوش مصنوعی:
+                                  </label>
+                                  <select
+                                    value={item.provider}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'provider', e.target.value as AiProvider)}
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
+                                  >
+                                    {PROVIDERS.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.icon} {p.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    کلید API اختصاصی:
+                                  </label>
+                                  <input
+                                    type="password"
+                                    value={item.apiKey}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'apiKey', e.target.value)}
+                                    placeholder="کلید API جایگزین..."
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddFallbackItem}
+                            className="w-full py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4 text-purple-400" />
+                            <span>افزودن هوش مصنوعی جدید به زنجیره اولویت‌ها</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Replace mode for Telegram */}
+                {rewriteMode === 'replace' && (
+                  <div className="neu-inset p-4 space-y-3 rounded-xl border border-blue-500/30 bg-blue-950/15">
+                    <div className="flex items-center justify-between border-b border-blue-500/20 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+                        <Replace className="w-4 h-4 text-blue-400" />
+                        <span>جدول جایگزینی کلمات و عبارت‌ها</span>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleCleanDuplicatesNow}
-                        disabled={cleaningDuplicates}
-                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                        onClick={handleAddRule}
+                        className="neu-btn-primary px-2.5 py-1 text-[11px] font-bold text-black flex items-center gap-1"
                       >
-                        <CopyCheck className={`w-4 h-4 ${cleaningDuplicates ? 'animate-spin' : ''}`} />
-                        <span>{cleaningDuplicates ? 'در حال اسکن و پاکسازی...' : 'اسکن و پاکسازی آنلاین'}</span>
+                        <Plus className="w-3 h-3" />
+                        <span>افزودن کلمه</span>
                       </button>
                     </div>
 
-                    {cleanDuplicatesResult && (
-                      <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                        cleanDuplicatesResult.ok 
-                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' 
-                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-                      }`}>
-                        <span className="font-bold">{cleanDuplicatesResult.message}</span>
+                    {replacements.length === 0 ? (
+                      <div className="text-center text-xs text-slate-500 py-3">
+                        هیچ قانونی تعریف نشده است.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {replacements.map((rule, idx) => (
+                          <div key={rule.id} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 w-4">{idx + 1}.</span>
+                            <input
+                              type="text"
+                              value={rule.find}
+                              onChange={(e) => handleRuleChange(rule.id, 'find', e.target.value)}
+                              placeholder="کلمه/عبارت مبدأ"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-yellow-400 dir-ltr text-right"
+                            />
+                            <span className="text-slate-500 text-xs">➔</span>
+                            <input
+                              type="text"
+                              value={rule.replace}
+                              onChange={(e) => handleRuleChange(rule.id, 'replace', e.target.value)}
+                              placeholder="کلمه جدید (یا خالی برای حذف)"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-blue-400 dir-ltr text-right"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRule(rule.id)}
+                              className="p-1.5 text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Section 4: Signature / Tag (افزودن امضا یا تگ اختصاصی به پیام) */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-white flex items-center gap-1.5">
-              <Tag className="w-4 h-4 text-yellow-400" />
-              <span>افزودن امضا یا تگ اختصاصی به انتهای پیام (Signature / Tag):</span>
-            </label>
-            <div className="neu-inset p-2 rounded-xl">
-              <textarea
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-                placeholder={`مثال:\n🆔 ${connection.targetChannel}`}
-                rows={3}
-                className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
-              />
-            </div>
-          </div>
-
-          {/* Section 4.5: Bale Dual Forwarding (تنظیمات ارسال به پیام‌رسان بله) */}
-          <div className="p-4 rounded-xl neu-inset bg-emerald-500/5 border border-emerald-500/20 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={enableBale}
-                  onChange={(e) => {
-                    if (!isSubscribed && e.target.checked) {
-                      setBaleStatusMsg({ type: 'error', text: 'ارسال به بله مخصوص نسخه های اشتراکی (PRO / VIP) است.' });
-                    } else {
-                      setBaleStatusMsg(null);
-                    }
-                    setEnableBale(e.target.checked);
-                  }}
-                  className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-400 bg-slate-900 border-white/20 cursor-pointer"
-                />
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-emerald-300">ارسال همزمان به پیام‌رسان بله (ایران) 🇮🇷</span>
-                  {isSubscribed ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
-                      پرو / VIP
-                    </span>
-                  ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30 flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-amber-400" />
-                      <span>ویژه نسخه اشتراکی</span>
-                    </span>
-                  )}
-                </div>
-              </label>
-
-              {!isSubscribed && onOpenSubscriptions && (
-                <button
-                  type="button"
-                  onClick={onOpenSubscriptions}
-                  className="px-2.5 py-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  <span>ارتقا به پرو</span>
-                </button>
-              )}
-            </div>
-
-            {!isSubscribed && enableBale && (
-              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>این قابلیت نیازمند اشتراک <strong>PRO</strong> یا <strong>VIP</strong> می‌باشد.</span>
-                </div>
-                {onOpenSubscriptions && (
-                  <button
-                    type="button"
-                    onClick={onOpenSubscriptions}
-                    className="px-2.5 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-xs hover:bg-amber-400 transition-all cursor-pointer shrink-0"
-                  >
-                    خرید اشتراک
-                  </button>
                 )}
               </div>
-            )}
 
-            {enableBale && (
-              <div className="space-y-3 pt-2 border-t border-white/10 animate-fadeIn">
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  💡 راهنما: ربات ساخته شده توسط <strong>BotFather@</strong> در بله را مدیر (Admin) کانال یا گروه مقصد کنید و توکن را وارد نمایید.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-200">
-                      کانال یا گروه مقصد در بله
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleTargetChannel}
-                        onChange={(e) => setBaleTargetChannel(e.target.value)}
-                        placeholder="مثال: my_bale_channel@"
-                        className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-200 flex items-center justify-between">
-                      <span>جایگزین آیدی در بله (اختیاری)</span>
-                      <span className="text-[9px] text-emerald-400 font-normal">در متن پست‌ها</span>
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleReplaceId}
-                        onChange={(e) => setBaleReplaceId(e.target.value)}
-                        placeholder="مثال: my_bale_id@ یا ble.ir/id"
-                        className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-200">
-                      توکن ربات بله
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleBotToken}
-                        onChange={(e) => setBaleBotToken(e.target.value)}
-                        placeholder="مثال: 123456789:ABCdef..."
-                        className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-left font-mono"
-                      />
-                    </div>
-                  </div>
+              {/* Section 3: Source Cleanup Controls */}
+              <div className="neu-inset p-4 space-y-3 border border-white/5">
+                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>تنظیمات پاکسازی لینک‌ها و آیدی‌های کانال مبدأ</span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleTestBale}
-                    disabled={testingBale}
-                    className="px-3 py-1.5 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {testingBale ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5 text-emerald-400" />}
-                    <span>تست ارسال به کانال بله</span>
-                  </button>
-
-                  {baleStatusMsg && (
-                    <div className={`text-xs font-bold flex items-center gap-1.5 ${
-                      baleStatusMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'
-                    }`}>
-                      {baleStatusMsg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                      <span>{baleStatusMsg.text}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={removeSourceLinks}
+                      onChange={(e) => setRemoveSourceLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">حذف خودکار تمام لینک‌ها، منشن‌ها و آیدی‌های تلگرامی کانال مبدأ</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px]">
+                        جایگزینی یا حذف آیدی {connection.sourceChannel} و لینک‌های t.me مربوط به آن
+                      </span>
                     </div>
-                  )}
+                  </label>
+
+                  <label className="flex items-start gap-3 neu-inset p-3 cursor-pointer hover:bg-white/5 transition-colors rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={cleanTagsAndLinks}
+                      onChange={(e) => setCleanTagsAndLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">پاکسازی کلی تمام تگ‌ها (#) و لینک‌های وب</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px]">
+                        حذف تمام لینک‌های اینترنتی و هشتگ‌های موجود در متن اصلی
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* Section 3.5: Duplicate Protection */}
+              <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CopyCheck className="w-5 h-5 text-amber-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص و جلوگیـری از پست‌های تکراری</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        الگوریتم هوشمند سنجش شباهت محتوا و پاکسازی اتوماتیک پست‌های تکراری در کانال مقصد
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={preventDuplicates}
+                      onChange={(e) => setPreventDuplicates(e.target.checked)}
+                      className="w-4 h-4 accent-amber-400 rounded"
+                    />
+                    <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
+                  </label>
+                </div>
+
+                {preventDuplicates && (
+                  <div className="space-y-4 animate-fadeIn pt-1">
+                    <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                          <span>۱. درصد آستانه تشخیص شباهت:</span>
+                        </label>
+                        <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
+                          {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <input
+                          type="range"
+                          min={50}
+                          max={100}
+                          step={5}
+                          value={duplicateSimilarityThreshold}
+                          onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
+                          className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 4: Signature */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-yellow-400" />
+                  <span>افزودن امضا یا تگ اختصاصی به انتهای پیام (Signature / Tag):</span>
+                </label>
+                <div className="neu-inset p-2 rounded-xl">
+                  <textarea
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder={`مثال:\n🆔 ${connection.targetChannel}`}
+                    rows={3}
+                    className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
+                  />
+                </div>
+              </div>
+
+              {/* Section 4.5: Bale Dual Forwarding (تنظیمات ارسال به پیام‌رسان بله) */}
+              <div className="p-4 rounded-xl neu-inset bg-emerald-500/5 border border-emerald-500/20 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={enableBale}
+                      onChange={(e) => {
+                        if (!isSubscribed && e.target.checked) {
+                          setBaleStatusMsg({ type: 'error', text: 'ارسال به بله مخصوص نسخه های اشتراکی (PRO / VIP) است.' });
+                        } else {
+                          setBaleStatusMsg(null);
+                        }
+                        setEnableBale(e.target.checked);
+                      }}
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-400 bg-slate-900 border-white/20 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-emerald-300">ارسال همزمان به پیام‌رسان بله (ایران) 🇮🇷</span>
+                      {isSubscribed ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
+                          پرو / VIP
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30 flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-amber-400" />
+                          <span>ویژه نسخه اشتراکی</span>
+                        </span>
+                      )}
+                    </div>
+                  </label>
+
+                  {!isSubscribed && onOpenSubscriptions && (
+                    <button
+                      type="button"
+                      onClick={onOpenSubscriptions}
+                      className="px-2.5 py-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-400" />
+                      <span>ارتقا به پرو</span>
+                    </button>
+                  )}
+                </div>
+
+                {!isSubscribed && enableBale && (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>این قابلیت نیازمند اشتراک <strong>PRO</strong> یا <strong>VIP</strong> می‌باشد.</span>
+                    </div>
+                    {onOpenSubscriptions && (
+                      <button
+                        type="button"
+                        onClick={onOpenSubscriptions}
+                        className="px-2.5 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-xs hover:bg-amber-400 transition-all cursor-pointer shrink-0"
+                      >
+                        خرید اشتراک
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {enableBale && (
+                  <div className="space-y-3 pt-2 border-t border-white/10 animate-fadeIn">
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      💡 راهنما: ربات ساخته شده توسط <strong>BotFather@</strong> در بله را مدیر (Admin) کانال یا گروه مقصد کنید و توکن را وارد نمایید.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-slate-200">
+                          کانال یا گروه مقصد در بله
+                        </label>
+                        <div className="neu-inset p-1 flex items-center">
+                          <input
+                            type="text"
+                            value={baleTargetChannel}
+                            onChange={(e) => setBaleTargetChannel(e.target.value)}
+                            placeholder="مثال: my_bale_channel@"
+                            className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-slate-200 flex items-center justify-between">
+                          <span>جایگزین آیدی در بله (اختیاری)</span>
+                          <span className="text-[9px] text-emerald-400 font-normal">در متن پست‌ها</span>
+                        </label>
+                        <div className="neu-inset p-1 flex items-center">
+                          <input
+                            type="text"
+                            value={baleReplaceId}
+                            onChange={(e) => setBaleReplaceId(e.target.value)}
+                            placeholder="مثال: my_bale_id@ یا ble.ir/id"
+                            className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-slate-200">
+                          توکن ربات بله
+                        </label>
+                        <div className="neu-inset p-1 flex items-center">
+                          <input
+                            type="text"
+                            value={baleBotToken}
+                            onChange={(e) => setBaleBotToken(e.target.value)}
+                            placeholder="مثال: 123456789:ABCdef..."
+                            className="w-full bg-transparent px-2.5 py-1.5 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-left font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleTestBale}
+                        disabled={testingBale}
+                        className="px-3 py-1.5 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        {testingBale ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5 text-emerald-400" />}
+                        <span>تست ارسال به کانال بله</span>
+                      </button>
+
+                      {baleStatusMsg && (
+                        <div className={`text-xs font-bold flex items-center gap-1.5 ${
+                          baleStatusMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {baleStatusMsg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                          <span>{baleStatusMsg.text}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

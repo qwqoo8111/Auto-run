@@ -2,13 +2,21 @@ export type ConnectionStatus = 'active' | 'paused' | 'error' | 'connecting';
 
 export type RewriteMode = 'none' | 'ai' | 'replace';
 export type ContentFilter = 'all' | 'text_only' | 'text_and_photo' | 'text_and_video' | 'text_and_voice' | 'text_and_video_note' | 'voice_only' | 'video_note_only';
-export type AiProvider = 'gemini' | 'openai' | 'deepseek' | 'claude' | 'custom_openai';
+export type AiProvider = 'gemini' | 'openai' | 'deepseek' | 'claude' | 'custom_openai' | 'openrouter';
 
 export interface TextReplacementRule {
   id: string;
   find: string;
   replace: string;
   isRegex?: boolean;
+}
+
+export interface AiFallbackItem {
+  id: string;
+  provider: AiProvider;
+  apiKey: string;
+  model?: string;
+  customBaseUrl?: string;
 }
 
 export interface AdvancedSettings {
@@ -19,6 +27,11 @@ export interface AdvancedSettings {
   aiModel?: string;
   aiCustomBaseUrl?: string;
   geminiApiKey?: string; // backwards compatibility
+  
+  // AI Fallback Chain Configuration
+  enableAiFallbackChain?: boolean;
+  aiFallbackChain?: AiFallbackItem[];
+
   replacements: TextReplacementRule[];
   signature?: string;
   removeSourceLinks?: boolean;

@@ -6,7 +6,7 @@ import { createServer as createViteServer } from "vite";
 import * as cheerio from "cheerio";
 import { GoogleGenAI } from "@google/genai";
 import nodemailer from "nodemailer";
-import { TelegramConnection, ConnectionLog, ForwardedMessageRecord, CreateConnectionDTO, AdvancedSettings, ContentFilter, User, LoginDTO, RegisterDTO } from "./src/types";
+import { TelegramConnection, ConnectionLog, ForwardedMessageRecord, CreateConnectionDTO, AdvancedSettings, ContentFilter, User, LoginDTO, RegisterDTO, AiProvider, AiFallbackItem } from "./src/types";
 
 const app = express();
 const PORT = 3000;
@@ -197,8 +197,8 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
   const customPrompt = options.prompt?.trim() || "متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن و هیچ لینک یا آیدی اضافه‌ای اضافه نکن:";
   const fullPrompt = `${customPrompt}\n\nمتن اصلی:\n${options.text}`;
 
-  // 1. OpenAI, DeepSeek, or Custom OpenAI Compatible Endpoint
-  if (provider === "openai" || provider === "deepseek" || provider === "custom_openai") {
+  // 1. OpenAI, DeepSeek, OpenRouter or Custom OpenAI Compatible Endpoint
+  if (provider === "openai" || provider === "deepseek" || provider === "custom_openai" || provider === "openrouter") {
     let baseUrl = "https://api.openai.com/v1";
     let defaultModel = "gpt-4o-mini";
     let apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
@@ -206,6 +206,10 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
     if (provider === "deepseek") {
       baseUrl = "https://api.deepseek.com";
       defaultModel = "deepseek-chat";
+      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
+    } else if (provider === "openrouter") {
+      baseUrl = (options.customBaseUrl?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+      defaultModel = "openrouter/auto";
       apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
     } else if (provider === "custom_openai") {
       baseUrl = (options.customBaseUrl?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
@@ -216,16 +220,22 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
     const modelName = options.model?.trim() || defaultModel;
 
     if (!apiKey) {
-      const pName = provider === "openai" ? "OpenAI" : provider === "deepseek" ? "DeepSeek" : "سرویس سفارشی";
+      const pName = provider === "openai" ? "OpenAI" : provider === "deepseek" ? "DeepSeek" : provider === "openrouter" ? "OpenRouter" : "سرویس سفارشی";
       throw new Error(`کلید API اختصاصی برای ${pName} وارد نشده است. ورود کلید API توسط کاربر الزامی است.`);
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    };
+    if (provider === "openrouter" || baseUrl.includes("openrouter.ai")) {
+      headers["HTTP-Referer"] = "https://ais-autorun.app";
+      headers["X-Title"] = "AutoRun AI Studio";
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: modelName,
         messages: [
@@ -337,6 +347,87 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
   }
 
   throw lastError || new Error("پاسخی از مدل‌های Gemini دریافت نشد.");
+}
+
+async function executeAiWithFallbackChain(options: {
+  provider?: AiProvider;
+  apiKey?: string;
+  model?: string;
+  customBaseUrl?: string;
+  prompt?: string;
+  text: string;
+  enableAiFallbackChain?: boolean;
+  aiFallbackChain?: AiFallbackItem[];
+  connectionId?: string;
+}): Promise<string> {
+  const chain: Array<{ provider: AiProvider; apiKey: string; model?: string; customBaseUrl?: string }> = [];
+
+  // 1. Primary provider
+  if (options.provider && (options.apiKey || options.provider === 'gemini')) {
+    chain.push({
+      provider: options.provider,
+      apiKey: options.apiKey || '',
+      model: options.model,
+      customBaseUrl: options.customBaseUrl,
+    });
+  }
+
+  // 2. Secondary/Tertiary fallbacks if enabled
+  if (options.enableAiFallbackChain && Array.isArray(options.aiFallbackChain)) {
+    for (const item of options.aiFallbackChain) {
+      if (item.apiKey && item.apiKey.trim()) {
+        chain.push({
+          provider: item.provider || 'gemini',
+          apiKey: item.apiKey.trim(),
+          model: item.model,
+          customBaseUrl: item.customBaseUrl,
+        });
+      }
+    }
+  }
+
+  if (chain.length === 0) {
+    throw new Error("هیچ هوش مصنوعی یا کلید API تنظیم نشده است.");
+  }
+
+  let lastErr: any = null;
+  for (let i = 0; i < chain.length; i++) {
+    const current = chain[i];
+    try {
+      const res = await executeAiRewrite({
+        provider: current.provider,
+        apiKey: current.apiKey,
+        model: current.model,
+        customBaseUrl: current.customBaseUrl,
+        prompt: options.prompt,
+        text: options.text,
+      });
+      if (res) {
+        if (i > 0 && options.connectionId) {
+          addLog(
+            options.connectionId,
+            "info",
+            `[سوییچ خودکار هوش مصنوعی] بازنویسی متن با هوش مصنوعی اولویت #${i + 1} (${current.provider}) با موفقیت انجام شد.`
+          );
+        }
+        return res;
+      }
+    } catch (err: any) {
+      lastErr = err;
+      const providerLabel = current.provider || 'AI';
+      const errMsg = err?.message || String(err);
+      console.warn(`[AI Fallback Chain] Provider #${i + 1} (${providerLabel}) failed:`, errMsg);
+      if (options.connectionId) {
+        addLog(
+          options.connectionId,
+          "warning",
+          `[سوییچ خودکار هوش مصنوعی] سرویس #${i + 1} (${providerLabel}) با خطا مواجه شد (${errMsg}). سوییچ اتوماتیک به هوش مصنوعی بعدی...`
+        );
+      }
+    }
+  }
+
+  throw lastErr || new Error("تمامی سرویس‌های هوش مصنوعی موجود در اولویت‌بندی با خطا مواجه شدند.");
 }
 
 function addLog(connectionId: string, level: ConnectionLog["level"], message: string, messageType?: string, sourceMsgId?: number) {
@@ -483,13 +574,15 @@ async function applyTextTransformations(
   // 2. Mode: AI Rewrite or Word Replacements or Raw
   if (settings.rewriteMode === "ai" && text.trim().length > 5) {
     try {
-      const rewritten = await executeAiRewrite({
+      const rewritten = await executeAiWithFallbackChain({
         provider: settings.aiProvider,
         apiKey: settings.aiApiKey || settings.geminiApiKey,
         model: settings.aiModel,
         customBaseUrl: settings.aiCustomBaseUrl,
         prompt: settings.aiPrompt,
         text: text,
+        enableAiFallbackChain: settings.enableAiFallbackChain,
+        aiFallbackChain: settings.aiFallbackChain,
       });
       if (rewritten) {
         text = rewritten;
@@ -1980,14 +2073,25 @@ async function fetchHighResEmbedMedia(cleanChannel: string, msgId: number): Prom
 
     const html = await res.text();
     const $ = cheerio.load(html);
+
+    // Skip photo extraction if embed page is a video post or round video
+    if ($("video, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, a.tgme_widget_message_video_player, .tgme_widget_message_roundvideo").length > 0) {
+      return { photos: [] };
+    }
+
     const photos: string[] = [];
 
-    // Check embed page photo elements (excluding replies, quotes, link previews, avatars)
+    // Check embed page photo elements (excluding replies, quotes, link previews, avatars, and video wrappers)
     $(".tgme_widget_message_photo_wrap, .tgme_widget_message_photo, a.tgme_widget_message_photo_wrap, .tgme_widget_message_grouped_layer_item, .tgme_widget_message_grouped_item").each((_, photoEl) => {
       const $p = $(photoEl);
-      if ($p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS).length > 0) {
+      if ($p.is(".tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player, .tgme_widget_message_roundvideo, .tgme_widget_message_roundvideo_player") ||
+          $p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS + ", .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player, .tgme_widget_message_roundvideo").length > 0) {
         return;
       }
+      if ($p.find("video, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, a.tgme_widget_message_video_player, i.tgme_widget_message_video_thumb, i.tgme_widget_message_video_play").length > 0) {
+        return;
+      }
+
       const style = $p.attr("style") || "";
       const match = style.match(/url\((.*?)\)/i);
       if (match && match[1]) {
@@ -2117,11 +2221,12 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       $post.find(".tgme_widget_message_photo_wrap, .tgme_widget_message_photo, a.tgme_widget_message_photo_wrap, .tgme_widget_message_grouped_layer_item, .tgme_widget_message_grouped_item").each((_, photoEl) => {
         const $p = $(photoEl);
         // Exclude elements inside message text, author/user avatars, replies, quotes, link previews, OR video wrappers/containers
-        if ($p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS + ", .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player").length > 0) {
+        if ($p.is(".tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player, .tgme_widget_message_roundvideo, .tgme_widget_message_roundvideo_player") ||
+            $p.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS + ", .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player, .tgme_widget_message_roundvideo").length > 0) {
           return;
         }
         // If this element contains a video tag or video player inside, skip photo extraction (video poster frame)
-        if ($p.find("video, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, a.tgme_widget_message_video_player").length > 0) {
+        if ($p.find("video, .tgme_widget_message_video_player, .tgme_widget_message_video_wrap, .tgme_widget_message_video, a.tgme_widget_message_video_player, i.tgme_widget_message_video_thumb, i.tgme_widget_message_video_play, .tgme_widget_message_roundvideo").length > 0) {
           return;
         }
 
@@ -2143,7 +2248,7 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       });
 
       // Extract Videos: Search ONLY in video tags/wrappers outside text, replies, quotes, link previews
-      $post.find("video.tgme_widget_message_video, .tgme_widget_message_video_player video, .tgme_widget_message_video_wrap video, a.tgme_widget_message_video_player").each((_, videoEl) => {
+      $post.find("video.tgme_widget_message_video, .tgme_widget_message_video_player video, .tgme_widget_message_video_wrap video, a.tgme_widget_message_video_player, video").each((_, videoEl) => {
         const $v = $(videoEl);
         if ($v.closest(TELEGRAM_EXCLUDE_MEDIA_CONTAINERS).length > 0) {
           return;
@@ -2162,14 +2267,32 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
         }
       });
 
+      // Post-extraction cleanup: if post has video(s), filter out poster thumbnails misidentified as photos
+      const videoItems = mediaItems.filter(m => m.type === 'video');
+      const photoItems = mediaItems.filter(m => m.type === 'photo');
+
+      if (videoItems.length > 0) {
+        const videoBases = new Set(videoItems.map(v => extractMediaBasename(v.url)).filter(Boolean));
+        let cleanPhotos = photoItems.filter(p => {
+          const pBase = extractMediaBasename(p.url);
+          if (pBase && videoBases.has(pBase)) return false;
+          return true;
+        });
+
+        // If post has videos and cleanPhotos count equals video count, cleanPhotos are video poster frame thumbnails
+        if (cleanPhotos.length > 0 && cleanPhotos.length <= videoItems.length) {
+          cleanPhotos = [];
+        }
+
+        mediaItems.length = 0;
+        mediaItems.push(...videoItems, ...cleanPhotos);
+      }
+
       let hasPhoto = mediaItems.some(m => m.type === 'photo');
       let photoUrl = mediaItems.find(m => m.type === 'photo')?.url;
 
       let hasVideo = mediaItems.some(m => m.type === 'video');
       const videoUrl = mediaItems.find(m => m.type === 'video')?.url;
-
-      // Check if this post is a single video/GIF post (not a real Telegram media group album)
-      const hasGroupedLayout = $post.find(".tgme_widget_message_grouped_layer, .tgme_widget_message_grouped_layer_item").length > 0 || $post.hasClass("tgme_widget_message_grouped");
 
       // Extract Voice Audio URL
       let voiceUrl: string | undefined = undefined;
@@ -2225,19 +2348,8 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       const hasGif = $post.find(".tgme_widget_message_gif_wrap, .tgme_widget_message_gif, i.tgme_widget_message_video_gif").length > 0 ||
                      $post.find(".tgme_widget_message_video_player.gif").length > 0;
 
-      if (hasGif && !hasGroupedLayout) {
+      if (hasGif && !hasVideo) {
         hasVideo = false;
-      }
-
-      if ((hasVideo || hasGif) && !hasGroupedLayout) {
-        // Single video/GIF post: exclude video preview poster thumbnails from photo mediaItems
-        for (let i = mediaItems.length - 1; i >= 0; i--) {
-          if (mediaItems[i].type === 'photo') {
-            mediaItems.splice(i, 1);
-          }
-        }
-        hasPhoto = false;
-        photoUrl = undefined;
       }
 
       const isMediaGroup = mediaItems.length > 1;
@@ -2308,14 +2420,21 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
       let isDuplicateAlbumItem = false;
       if (prevUrls.size > 0 && currUrls.length > 0) {
         const matchCount = currUrls.filter(u => prevUrls.has(u)).length;
-        if (matchCount > 0 && (matchCount === currUrls.length || matchCount === prevUrls.size)) {
+        if (matchCount > 0) {
           isDuplicateAlbumItem = true;
         } else {
           const prevBase = Array.from(prevUrls).map(extractMediaBasename).filter(Boolean);
           const currBase = currUrls.map(extractMediaBasename).filter(Boolean);
           const baseMatch = currBase.some(b => prevBase.includes(b));
-          if (baseMatch && (prev.isMediaGroup || post.isMediaGroup || prev.hasVideo || post.hasVideo)) {
+          if (baseMatch) {
             isDuplicateAlbumItem = true;
+          } else {
+            const msgIdDiff = Math.abs(post.msgId - prev.msgId);
+            const isConsecutiveAlbum = msgIdDiff <= 3;
+            const sameOrEmptyText = !prev.text || !post.text || prev.text.trim() === post.text.trim();
+            if (isConsecutiveAlbum && sameOrEmptyText) {
+              isDuplicateAlbumItem = true;
+            }
           }
         }
       }
@@ -2326,10 +2445,49 @@ async function scrapeTelegramChannel(sourceChannel: string): Promise<{ ok: boole
             prev.mediaItems.push(item);
           }
         }
-        if (prev.mediaItems.length > 1) {
-          prev.isMediaGroup = true;
-          prev.type = "media_group";
+
+        // Clean up prev.mediaItems to remove duplicate URLs, duplicate basenames, and video thumbnails
+        const uniquePrevItems: { type: 'photo' | 'video'; url: string }[] = [];
+        const seenPrevUrls = new Set<string>();
+        for (const m of prev.mediaItems) {
+          if (!seenPrevUrls.has(m.url)) {
+            seenPrevUrls.add(m.url);
+            uniquePrevItems.push(m);
+          }
         }
+
+        const prevVideos = uniquePrevItems.filter(m => m.type === 'video');
+        const prevPhotos = uniquePrevItems.filter(m => m.type === 'photo');
+
+        if (prevVideos.length > 0) {
+          const vBases = new Set(prevVideos.map(v => extractMediaBasename(v.url)).filter(Boolean));
+          let cleanPhotos = prevPhotos.filter(p => {
+            const pBase = extractMediaBasename(p.url);
+            if (pBase && vBases.has(pBase)) return false;
+            return true;
+          });
+          if (cleanPhotos.length <= prevVideos.length) {
+            cleanPhotos = [];
+          }
+          prev.mediaItems = [...prevVideos, ...cleanPhotos];
+        } else {
+          prev.mediaItems = uniquePrevItems;
+        }
+
+        prev.hasVideo = prev.mediaItems.some(m => m.type === 'video');
+        prev.hasPhoto = prev.mediaItems.some(m => m.type === 'photo');
+        prev.videoUrl = prev.mediaItems.find(m => m.type === 'video')?.url;
+        prev.photoUrl = prev.mediaItems.find(m => m.type === 'photo')?.url;
+        prev.isMediaGroup = prev.mediaItems.length > 1;
+
+        if (prev.isMediaGroup) {
+          prev.type = "media_group";
+        } else if (prev.hasVideo) {
+          prev.type = "video";
+        } else if (prev.hasPhoto) {
+          prev.type = "photo";
+        }
+
         if (!prev.text && post.text) {
           prev.text = post.text;
         }

@@ -1007,10 +1007,12 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                     onChange={(e) => setUserAiProvider(e.target.value)}
                     className="w-full p-2.5 text-xs font-bold bg-slate-900 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
                   >
+                    <option value="openrouter">OpenRouter (اوپن‌روتر)</option>
                     <option value="gemini">Google Gemini</option>
                     <option value="openai">OpenAI (ChatGPT)</option>
                     <option value="deepseek">DeepSeek AI</option>
                     <option value="claude">Anthropic Claude</option>
+                    <option value="custom_openai">سرویس سفارشی (Custom API)</option>
                   </select>
                 </div>
               </div>
