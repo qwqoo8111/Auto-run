@@ -206,15 +206,16 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
     if (provider === "deepseek") {
       baseUrl = "https://api.deepseek.com";
       defaultModel = "deepseek-chat";
-      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
     } else if (provider === "openrouter") {
-      baseUrl = (options.customBaseUrl?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+      baseUrl = "https://openrouter.ai/api/v1";
       defaultModel = "openrouter/auto";
-      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
     } else if (provider === "custom_openai") {
-      baseUrl = (options.customBaseUrl?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
-      defaultModel = "meta-llama/llama-3.3-70b-instruct";
-      apiKey = options.apiKey?.trim().replace(/^["']|["']$/g, '') || "";
+      baseUrl = "https://api.groq.com/openai/v1";
+      defaultModel = "llama-3.3-70b-versatile";
+    }
+
+    if (options.customBaseUrl && options.customBaseUrl.trim()) {
+      baseUrl = options.customBaseUrl.trim().replace(/\/+$/, "");
     }
 
     const modelName = options.model?.trim() || defaultModel;
@@ -1354,6 +1355,72 @@ function convertMarkdownToTelegramHtml(text: string): string {
   html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
 
   return html;
+}
+
+const DEFAULT_AD_KEYWORDS = [
+  'سفارش تبلیغ',
+  'ثبت آگهی',
+  'تعرفه تبلیغات',
+  'ادمین تبلیغات',
+  'رزرو تبلیغ',
+  'پذیرش تبلیغات',
+  'اسپانسر این پست',
+  'جهت آگهی',
+  'تبلیغات گسترده',
+  'آیدی رزرو',
+  'پکیج ویژه فروش',
+  'جهت رزرو تبلیغ',
+  'برای سفارش آگهی',
+];
+
+async function checkAdPost(text: string, settings?: AdvancedSettings): Promise<{ isAd: boolean; reason?: string }> {
+  if (!text || !settings?.enableAdDetection) {
+    return { isAd: false };
+  }
+
+  const method = settings.adDetectionMethod || 'keywords';
+  const customWords = settings.customAdKeywords || [];
+  const allAdKeywords = [...DEFAULT_AD_KEYWORDS, ...customWords];
+
+  // 1. Keyword Check
+  if (method === 'keywords' || method === 'both') {
+    const lowerText = text.toLowerCase();
+    for (const kw of allAdKeywords) {
+      if (kw && kw.trim() && lowerText.includes(kw.trim().toLowerCase())) {
+        return { isAd: true, reason: `شناسایی کلمه کلیدی تبلیغاتی ("${kw.trim()}")` };
+      }
+    }
+  }
+
+  // 2. AI Ad Check
+  if ((method === 'ai' || method === 'both') && text.trim().length > 15) {
+    try {
+      const aiPrompt = `آیا متن زیر یک پست تبلیغاتی، آگهی فروش، معرفی کانال/محصول برای خرید یا تعرفه تبلیغات است؟ 
+پاسخ را فقط و فقط به صورت کلمه YES یا NO بنویس. هیچ کلمه دیگری اضافه نکن.
+
+متن:
+${text.slice(0, 800)}`;
+
+      const resText = await executeAiWithFallbackChain({
+        provider: settings.aiProvider || 'gemini',
+        apiKey: settings.aiApiKey || settings.geminiApiKey,
+        model: settings.aiModel,
+        customBaseUrl: settings.aiCustomBaseUrl,
+        prompt: aiPrompt,
+        text: "",
+        enableAiFallbackChain: settings.enableAiFallbackChain,
+        aiFallbackChain: settings.aiFallbackChain,
+      });
+
+      if (resText && resText.toUpperCase().includes('YES')) {
+        return { isAd: true, reason: 'تشخیص هوشمند توسط هوش مصنوعی (AI Ad Detector)' };
+      }
+    } catch (e) {
+      console.warn("AI Ad Detection check failed:", e);
+    }
+  }
+
+  return { isAd: false };
 }
 
 async function sendTelegramMessage(
@@ -2688,6 +2755,43 @@ async function processConnectionSync(conn: TelegramConnection, forceAll: boolean
         conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
         writeJsonFile(CONNECTIONS_FILE, connections);
         continue;
+      }
+
+      // 1b. Forbidden Keywords Filter Check (نکته پنجم)
+      if (conn.settings?.forbiddenKeywords && conn.settings.forbiddenKeywords.length > 0 && post.text) {
+        const lowerPostText = post.text.toLowerCase();
+        const matchedForbidden = conn.settings.forbiddenKeywords.find(
+          (kw) => kw && kw.trim() && lowerPostText.includes(kw.trim().toLowerCase())
+        );
+        if (matchedForbidden) {
+          addLog(
+            conn.id,
+            "info",
+            `[فیلتر کلمات ممنوعه] پست #${post.msgId} به علت وجود کلمه ممنوعه "${matchedForbidden.trim()}" نادیده گرفته شد.`,
+            post.type,
+            post.msgId
+          );
+          conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+          writeJsonFile(CONNECTIONS_FILE, connections);
+          continue;
+        }
+      }
+
+      // 1c. AI & Keyword Ad Detection Filter Check (نکته سوم)
+      if (conn.settings?.enableAdDetection && post.text) {
+        const adCheck = await checkAdPost(post.text, conn.settings);
+        if (adCheck.isAd) {
+          addLog(
+            conn.id,
+            "warning",
+            `[فیلتر ضد تبلیغات] پست #${post.msgId} به علت تشخیص متن تبلیغاتی (${adCheck.reason}) نادیده گرفته شد.`,
+            post.type,
+            post.msgId
+          );
+          conn.lastMessageId = Math.max(conn.lastMessageId || 0, post.msgId);
+          writeJsonFile(CONNECTIONS_FILE, connections);
+          continue;
+        }
       }
 
       // 2. Text Transformation & AI Rewriting

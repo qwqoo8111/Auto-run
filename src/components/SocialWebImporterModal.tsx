@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Link as LinkIcon, Send, Twitter, Globe, RefreshCw, CheckCircle, AlertCircle, Flame, Clock, Settings, ListFilter, Zap, Key, ArrowUp, PlusCircle } from 'lucide-react';
 import { TelegramConnection, CreateConnectionDTO } from '../types';
-import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, triggerAutoTrendRunNow, AutoTrendConfig } from '../services/api';
+import { extractSocialLink, fetchAiXTrends, postExperimentalToTelegram, getAutoTrendConfig, saveAutoTrendConfig, triggerAutoTrendRunNow, testAiApi, AutoTrendConfig } from '../services/api';
 
 interface SocialWebImporterModalProps {
   isOpen: boolean;
@@ -62,6 +62,17 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
     return localStorage.getItem('autorun_user_ai_api_key') || '';
   });
   const [userAiProvider, setUserAiProvider] = useState<string>('gemini');
+  const [userAiCustomBaseUrl, setUserAiCustomBaseUrl] = useState<string>(() => {
+    return localStorage.getItem('autorun_user_ai_custom_base_url') || '';
+  });
+  const [userAiModel, setUserAiModel] = useState<string>(() => {
+    return localStorage.getItem('autorun_user_ai_model') || '';
+  });
+
+  // AI Connection Test State
+  const [isTestingAi, setIsTestingAi] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<string | null>(null);
+  const [aiTestError, setAiTestError] = useState<string | null>(null);
 
   // Auto Trend Scheduler State
   const [autoConfig, setAutoConfig] = useState<AutoTrendConfig>({
@@ -115,11 +126,48 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         if (res.config.provider) {
           setUserAiProvider(res.config.provider);
         }
+        if (res.config.customBaseUrl) {
+          setUserAiCustomBaseUrl(res.config.customBaseUrl);
+          localStorage.setItem('autorun_user_ai_custom_base_url', res.config.customBaseUrl);
+        }
+        if (res.config.model) {
+          setUserAiModel(res.config.model);
+          localStorage.setItem('autorun_user_ai_model', res.config.model);
+        }
       }
     } catch (err) {
       console.warn("Failed to load auto trend config:", err);
     } finally {
       setIsLoadingAuto(false);
+    }
+  };
+
+  const handleTestAiInModal = async () => {
+    if (!userAiApiKey.trim() && userAiProvider !== 'gemini') {
+      setAiTestError('لطفاً ابتدا کلید API اختصاصی خود را وارد کنید.');
+      return;
+    }
+    setIsTestingAi(true);
+    setAiTestResult(null);
+    setAiTestError(null);
+    try {
+      const res = await testAiApi({
+        provider: userAiProvider,
+        apiKey: userAiApiKey.trim(),
+        model: userAiModel.trim(),
+        customBaseUrl: userAiCustomBaseUrl.trim(),
+        prompt: 'یک متن کوتاه تست ارتباط به زبان فارسی بفرست.',
+        sampleText: 'تست اتصال API هوش مصنوعی در ابزار ترندها',
+      });
+      if (res.success) {
+        setAiTestResult(res.result);
+      } else {
+        setAiTestError('پاسخ ناموفق از API دریافت شد.');
+      }
+    } catch (err: any) {
+      setAiTestError(err.message || 'خطا در برقراری ارتباط با API هوش مصنوعی');
+    } finally {
+      setIsTestingAi(false);
     }
   };
 
@@ -200,7 +248,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // 1. Search Manual Preview
   const handleSearchTrendsManual = async () => {
-    if (!userAiApiKey.trim()) {
+    if (!userAiApiKey.trim() && userAiProvider !== 'gemini') {
       setStatusMessage({ type: 'error', text: 'لطفاً ابتدا کلید API اختصاصی هوش مصنوعی خود را در کادر مربوطه وارد کنید.' });
       return;
     }
@@ -215,6 +263,8 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         count: trendCount,
         apiKey: userAiApiKey.trim(),
         provider: userAiProvider,
+        model: userAiModel.trim(),
+        customBaseUrl: userAiCustomBaseUrl.trim(),
       });
 
       if (res && res.trends && res.trends.length > 0) {
@@ -235,7 +285,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
 
   // 2. Search & Instant Auto-Post to Channel
   const handleSearchAndPostInstant = async () => {
-    if (!userAiApiKey.trim()) {
+    if (!userAiApiKey.trim() && userAiProvider !== 'gemini') {
       setStatusMessage({ type: 'error', text: 'لطفاً ابتدا کلید API اختصاصی هوش مصنوعی خود را در کادر مربوطه وارد کنید.' });
       return;
     }
@@ -255,6 +305,8 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         count: trendCount,
         apiKey: userAiApiKey.trim(),
         provider: userAiProvider,
+        model: userAiModel.trim(),
+        customBaseUrl: userAiCustomBaseUrl.trim(),
       });
 
       if (res && res.trends && res.trends.length > 0) {
@@ -482,17 +534,32 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         combineIntoSinglePost: combineIntoSinglePost,
         apiKey: userAiApiKey.trim(),
         provider: userAiProvider,
+        model: userAiModel.trim(),
+        customBaseUrl: userAiCustomBaseUrl.trim(),
       };
 
       const res = await saveAutoTrendConfig(payload);
       if (res.ok && res.config) {
         setAutoConfig(res.config);
+        if (autoConfig.enabled && onCreateConnection && targetChannel && botToken) {
+          const exists = connections.some(c => c.targetChannel === targetChannel && c.sourceChannel.includes(trendTopic.trim()));
+          if (!exists) {
+            try {
+              await onCreateConnection({
+                sourceType: 'twitter',
+                sourceChannel: `موضوع ترند: ${trendTopic.trim()}`,
+                targetChannel: targetChannel.trim(),
+                botToken: botToken.trim(),
+              });
+            } catch (err) {}
+          }
+        }
         setStatusMessage({
           type: 'success',
           text: res.config.enabled
             ? res.config.combineIntoSinglePost
-              ? `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تمام ${trendCount} ترند به صورت ۱ پیام خلاصه به ${targetChannel} ارسال می‌گردد.`
-              : `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تعداد ${trendCount} پست مجزا به ${targetChannel} ارسال می‌گردد.`
+              ? `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تمام ${trendCount} ترند به صورت ۱ پیام خلاصه به ${targetChannel} ارسال و به لیست اتصالات اضافه گردید.`
+              : `ربات ارسال خودکار فعال شد! هر ${intervalVal} ساعت تعداد ${trendCount} پست مجزا به ${targetChannel} ارسال و به لیست اتصالات اضافه گردید.`
             : 'ارسال خودکار زمان‌بندی‌شده متوقف شد.',
         });
       } else {
@@ -529,6 +596,8 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
         combineIntoSinglePost: combineIntoSinglePost,
         apiKey: userAiApiKey.trim(),
         provider: userAiProvider,
+        model: userAiModel.trim(),
+        customBaseUrl: userAiCustomBaseUrl.trim(),
       };
 
       await saveAutoTrendConfig(payload);
@@ -971,11 +1040,11 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
           <div className="space-y-6">
             
             {/* User AI API Key Configuration Card */}
-            <div className="p-4 neu-inset rounded-2xl border border-purple-500/30 bg-purple-950/30 space-y-3">
+            <div className="p-4 neu-inset rounded-2xl border border-purple-500/30 bg-purple-950/30 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-xs font-black text-purple-200 flex items-center gap-1.5">
                   <Key className="w-4 h-4 text-purple-400" />
-                  <span>کلید API اختصاصی هوش مصنوعی کاربر (جهت کاوش و بروزرسانی خودکار ترندهای X):</span>
+                  <span>تنظیم سرویس و کلید API اختصاصی هوش مصنوعی (جهت کاوش و بروزرسانی ترندهای X):</span>
                   <span className="text-rose-400 font-bold">* (الزامی)</span>
                 </label>
                 <a
@@ -988,6 +1057,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                 </a>
               </div>
 
+              {/* Provider & API Key */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="md:col-span-3">
                   <input
@@ -997,7 +1067,7 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                       setUserAiApiKey(e.target.value);
                       localStorage.setItem('autorun_user_ai_api_key', e.target.value.trim());
                     }}
-                    placeholder="کلید API اختصاصی Gemini یا سرویس مورد نظر (مثال: AIzaSy...)"
+                    placeholder="کلید API اختصاصی خود را وارد کنید..."
                     className="w-full p-2.5 text-xs font-mono bg-slate-900 border border-purple-500/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 dir-ltr text-right"
                   />
                 </div>
@@ -1007,17 +1077,163 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
                     onChange={(e) => setUserAiProvider(e.target.value)}
                     className="w-full p-2.5 text-xs font-bold bg-slate-900 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
                   >
+                    <option value="custom_openai">سرویس سفارشی / API هر سایت (Custom API)</option>
                     <option value="openrouter">OpenRouter (اوپن‌روتر)</option>
                     <option value="gemini">Google Gemini</option>
                     <option value="openai">OpenAI (ChatGPT)</option>
                     <option value="deepseek">DeepSeek AI</option>
                     <option value="claude">Anthropic Claude</option>
-                    <option value="custom_openai">سرویس سفارشی (Custom API)</option>
                   </select>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
-                🔒 طبق دستورالعمل، کلید پیش‌فرض سیستم حذف گردیده و هر کاربر جهت دریافت و بروزرسانی خودکار ترندها باید کلید API اختصاصی خود را وارد نماید.
+
+              {/* Custom Base URL (لینک دلخواه سایت API) */}
+              <div className="space-y-2 p-3 rounded-xl bg-slate-900/80 border border-blue-500/30">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-blue-200 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
+                  </label>
+                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
+                    قابلیت اتصال API به هر سایت
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={userAiCustomBaseUrl}
+                  onChange={(e) => {
+                    setUserAiCustomBaseUrl(e.target.value);
+                    localStorage.setItem('autorun_user_ai_custom_base_url', e.target.value.trim());
+                  }}
+                  placeholder="https://api.your-custom-site.com/v1 یا http://localhost:11434/v1"
+                  className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 dir-ltr text-left"
+                />
+                <div className="flex gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای سریع:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserAiProvider('custom_openai');
+                      setUserAiCustomBaseUrl('https://api.groq.com/openai/v1');
+                      setUserAiModel('llama-3.3-70b-versatile');
+                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.groq.com/openai/v1');
+                      localStorage.setItem('autorun_user_ai_model', 'llama-3.3-70b-versatile');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                  >
+                    ⚡ Groq API
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserAiProvider('openrouter');
+                      setUserAiCustomBaseUrl('https://openrouter.ai/api/v1');
+                      setUserAiModel('openrouter/auto');
+                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://openrouter.ai/api/v1');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                  >
+                    🌐 OpenRouter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserAiProvider('custom_openai');
+                      setUserAiCustomBaseUrl('https://api.together.xyz/v1');
+                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.together.xyz/v1');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                  >
+                    🚀 Together AI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserAiProvider('custom_openai');
+                      setUserAiCustomBaseUrl('http://localhost:11434/v1');
+                      localStorage.setItem('autorun_user_ai_custom_base_url', 'http://localhost:11434/v1');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                  >
+                    💻 Ollama (محلی)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserAiProvider('deepseek');
+                      setUserAiCustomBaseUrl('https://api.deepseek.com');
+                      setUserAiModel('deepseek-chat');
+                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.deepseek.com');
+                      localStorage.setItem('autorun_user_ai_model', 'deepseek-chat');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                  >
+                    🐳 DeepSeek
+                  </button>
+                </div>
+              </div>
+
+              {/* Model Name & Test Button Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    🤖 نام مدل اختصاصی هوش مصنوعی (اختیاری / تایپ دستی):
+                  </label>
+                  <input
+                    type="text"
+                    value={userAiModel}
+                    onChange={(e) => {
+                      setUserAiModel(e.target.value);
+                      localStorage.setItem('autorun_user_ai_model', e.target.value.trim());
+                    }}
+                    placeholder="مثال: llama-3.3-70b-versatile یا deepseek-chat یا gpt-4o"
+                    className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-purple-400 dir-ltr text-left"
+                  />
+                </div>
+                <div className="md:col-span-1 flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleTestAiInModal}
+                    disabled={isTestingAi}
+                    className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow"
+                  >
+                    {isTestingAi ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>در حال تست...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3.5 h-3.5 text-amber-300" />
+                        <span>⚡ تست اتصال به API</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Live Test Feedback Display */}
+              {aiTestResult && (
+                <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs space-y-1 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-300">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span>تست اتصال به API هوش مصنوعی با موفقیت انجام شد! پاسخ لایو:</span>
+                  </div>
+                  <div className="p-2 bg-black/50 rounded border border-emerald-500/20 font-mono text-[11px] text-emerald-100 whitespace-pre-wrap leading-relaxed">
+                    {aiTestResult}
+                  </div>
+                </div>
+              )}
+
+              {aiTestError && (
+                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{aiTestError}</span>
+                </div>
+              )}
+
+              <p className="text-[10px] text-slate-300 leading-relaxed font-medium border-t border-white/10 pt-2">
+                🔒 کلید API و تنظیمات آدرس سرور اختصاصی شما در حافظه مرورگر و سرور جهت کاوش خودکار ترندها ذخیره می‌گردد.
               </p>
             </div>
 

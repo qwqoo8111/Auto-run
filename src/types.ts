@@ -51,6 +51,12 @@ export interface AdvancedSettings {
   duplicateSimilarityThreshold?: number;
   duplicateAction?: 'skip' | 'delete_existing';
   checkMediaDuplicate?: boolean;
+  // Forbidden Words & Ad Detection Filters
+  forbiddenKeywords?: string[];
+  enableAdDetection?: boolean;
+  adDetectionMethod?: 'ai' | 'keywords' | 'both';
+  customAdKeywords?: string[];
+
   // Global Channel Supervisor
   enableGlobalSupervisor?: boolean;
   globalHashAlgorithm?: 'fingerprint' | 'exact_hash' | 'fuzzy_token';

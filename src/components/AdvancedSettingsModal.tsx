@@ -122,15 +122,17 @@ const PROVIDERS: {
   },
   {
     id: 'custom_openai',
-    name: 'سرویس دلخواه / Groq / Ollama',
-    badge: 'API استاندارد OpenAI',
+    name: 'سرویس دلخواه / API هر سایت',
+    badge: 'اتصال به API هر سایت یا Endpoint دلخواه',
     icon: '🌐',
     color: 'border-blue-500/30 text-blue-300 bg-blue-950/20',
-    keyLink: 'https://openrouter.ai/keys',
-    keyTip: 'اتصال به Groq, Together, Ollama یا سرور شخصی',
+    keyLink: '',
+    keyTip: 'پشتیبانی از Base URL اختصاصی، Groq, Together, Ollama یا API هر سایت دلخواه',
     models: [
-      { id: 'llama-3.3-70b-versatile', label: 'Groq: Llama 3.3 70B Versatile' },
       { id: 'custom', label: 'نام مدل سفارشی دلخواه (تایپ دستی)' },
+      { id: 'llama-3.3-70b-versatile', label: 'Groq: Llama 3.3 70B Versatile' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat V3' },
+      { id: 'mistral-large-latest', label: 'Mistral Large' },
     ],
   },
 ];
@@ -170,6 +172,16 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [testingAi, setTestingAi] = useState<boolean>(false);
   const [aiTestResult, setAiTestResult] = useState<string | null>(null);
   const [aiTestError, setAiTestError] = useState<string | null>(null);
+
+  // Forbidden Keywords Filter State
+  const [forbiddenKeywords, setForbiddenKeywords] = useState<string[]>([]);
+  const [newForbiddenWord, setNewForbiddenWord] = useState<string>('');
+
+  // Ad Detection Filter State
+  const [enableAdDetection, setEnableAdDetection] = useState<boolean>(false);
+  const [adDetectionMethod, setAdDetectionMethod] = useState<'ai' | 'keywords' | 'both'>('keywords');
+  const [customAdKeywords, setCustomAdKeywords] = useState<string[]>([]);
+  const [newAdKeyword, setNewAdKeyword] = useState<string>('');
 
   // Live Preview Sample Text
   const [sampleText, setSampleText] = useState<string>('');
@@ -227,6 +239,11 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       setRemoveSourceLinks(s.removeSourceLinks !== undefined ? s.removeSourceLinks : true);
       setCleanTagsAndLinks(!!s.cleanTagsAndLinks);
       setContentFilter(s.contentFilter || 'all');
+
+      setForbiddenKeywords(s.forbiddenKeywords || []);
+      setEnableAdDetection(!!s.enableAdDetection);
+      setAdDetectionMethod(s.adDetectionMethod || 'keywords');
+      setCustomAdKeywords(s.customAdKeywords || []);
 
       setPreventDuplicates(s.preventDuplicates !== undefined ? !!s.preventDuplicates : true);
       setDuplicateSimilarityThreshold(s.duplicateSimilarityThreshold ?? 80);
@@ -503,6 +520,32 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     }
   };
 
+  const handleAddForbiddenWord = (wordToAdd?: string) => {
+    const target = (wordToAdd || newForbiddenWord).trim();
+    if (!target) return;
+    if (!forbiddenKeywords.includes(target)) {
+      setForbiddenKeywords([...forbiddenKeywords, target]);
+    }
+    setNewForbiddenWord('');
+  };
+
+  const handleRemoveForbiddenWord = (word: string) => {
+    setForbiddenKeywords(forbiddenKeywords.filter((w) => w !== word));
+  };
+
+  const handleAddAdKeyword = (wordToAdd?: string) => {
+    const target = (wordToAdd || newAdKeyword).trim();
+    if (!target) return;
+    if (!customAdKeywords.includes(target)) {
+      setCustomAdKeywords([...customAdKeywords, target]);
+    }
+    setNewAdKeyword('');
+  };
+
+  const handleRemoveAdKeyword = (word: string) => {
+    setCustomAdKeywords(customAdKeywords.filter((w) => w !== word));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSavedSuccess(false);
@@ -530,6 +573,10 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         removeSourceLinks,
         cleanTagsAndLinks,
         contentFilter,
+        forbiddenKeywords,
+        enableAdDetection,
+        adDetectionMethod,
+        customAdKeywords,
         enableBale,
         baleTargetChannel: baleTargetChannel.trim(),
         baleBotToken: baleBotToken.trim(),
@@ -1085,9 +1132,115 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       </div>
                     </div>
 
+                    {/* 2. Model Selection */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-purple-200">
-                        ۲. کلید API اختصاصی:
+                        ۲. انتخاب مدل هوش مصنوعی:
+                      </label>
+                      <select
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
+                      >
+                        {currentProviderConfig.models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      {(aiModel === 'custom' || aiProvider === 'custom_openai') && (
+                        <input
+                          type="text"
+                          value={customModelInput}
+                          onChange={(e) => setCustomModelInput(e.target.value)}
+                          placeholder="نام مدل سفارشی دلخواه را وارد کنید (مثلاً: llama-3.3-70b-versatile یا gpt-4o)..."
+                          className="w-full bg-black/70 border border-purple-500/40 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-300 font-mono mt-1.5"
+                        />
+                      )}
+                    </div>
+
+                    {/* 3. Custom API Base URL for ANY Site/Server (نکته اول) */}
+                    <div className="space-y-2 p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/35 shadow-inner">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="block text-xs font-bold text-blue-200 flex items-center gap-1.5">
+                          <Globe className="w-4 h-4 text-blue-400" />
+                          <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
+                        </label>
+                        <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
+                          نکته مهم: قابلیت دادن API هر سایت
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        با وارد کردن آدرس Base URL در این قسمت، می‌توانید از API اختصاصی <b>هر سایت، ارائه‌دهنده یا سرور شخصی</b> (مانند OpenAI-compatible API، Groq، Together AI، Ollama، OpenRouter و غیره) استفاده نمایید:
+                      </p>
+                      <input
+                        type="text"
+                        value={aiCustomBaseUrl}
+                        onChange={(e) => setAiCustomBaseUrl(e.target.value)}
+                        placeholder="https://api.your-custom-site.com/v1 یا http://localhost:11434/v1"
+                        className="w-full bg-black/70 border border-white/20 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
+                      />
+                      <div className="flex gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای آماده:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('custom_openai');
+                            setAiCustomBaseUrl('https://api.groq.com/openai/v1');
+                            setAiModel('llama-3.3-70b-versatile');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          ⚡ Groq API
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('openrouter');
+                            setAiCustomBaseUrl('https://openrouter.ai/api/v1');
+                            setAiModel('openrouter/auto');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          🌐 OpenRouter
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('custom_openai');
+                            setAiCustomBaseUrl('https://api.together.xyz/v1');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          🚀 Together AI
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('custom_openai');
+                            setAiCustomBaseUrl('http://localhost:11434/v1');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          💻 Ollama (محلی)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('deepseek');
+                            setAiCustomBaseUrl('https://api.deepseek.com');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          🐳 DeepSeek
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        ۴. کلید API اختصاصی:
                       </label>
                       <input
                         type="password"
@@ -1096,6 +1249,80 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                         placeholder="کلید API خود را وارد کنید..."
                         className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-purple-200">
+                        ۵. نوشتن پرامپت و دستورات برای ربات (دستور بازنویسی و لحن):
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="دستورات و لحن بازنویسی ربات را بنویسید (مثلاً: متن را خلاصه و جذاب با ایموجی بازنویسی کن)..."
+                        className="w-full bg-black/60 border border-white/15 p-2.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-sans leading-relaxed"
+                      />
+                      <div className="flex gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setAiPrompt('متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن:')}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
+                        >
+                          ✨ استاندارد و جذاب
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAiPrompt('متن زیر را خلاصه‌سازی کن و نکات کلیدی آن را با ایموجی‌های مرتبط تیتروار بنویس:')}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
+                        >
+                          📌 خلاصه‌سازی تیتروار
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAiPrompt('متن زیر را به لحن کاملاً رسمی و تخصصی ترجمه و بازنویسی کن:')}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
+                        >
+                          👔 لحن رسمی
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI API Test Connection Button */}
+                    <div className="p-3 neu-inset rounded-xl bg-purple-900/20 border border-purple-500/30 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                          <Activity className="w-4 h-4 text-purple-400" />
+                          <span>تست وصل بودن API و بررسی لایو اتصال هوش مصنوعی:</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleTestAi}
+                          disabled={testingAi}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 border border-purple-400/40 shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                        >
+                          {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>{testingAi ? 'در حال تست API...' : '🧪 تست وصل بودن API'}</span>
+                        </button>
+                      </div>
+
+                      {aiTestResult && (
+                        <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs dir-rtl space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>ارتباط API موفقیت‌آمیز بود! (پاسخ دریافتی از هوش مصنوعی):</span>
+                          </div>
+                          <p className="text-[11px] bg-black/40 p-2 rounded border border-emerald-500/20 leading-relaxed font-sans text-slate-100">
+                            {aiTestResult}
+                          </p>
+                        </div>
+                      )}
+
+                      {aiTestError && (
+                        <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                          <span>{aiTestError}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Fallback Chain / Priority AI Configuration */}
@@ -1191,6 +1418,32 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                                     onChange={(e) => handleFallbackItemChange(item.id, 'apiKey', e.target.value)}
                                     placeholder="کلید API جایگزین..."
                                     className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    🌐 آدرس سایت API (Base URL دلخواه):
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={item.customBaseUrl || ''}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'customBaseUrl', e.target.value)}
+                                    placeholder="https://api.your-custom-site.com/v1"
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono text-left dir-ltr"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    🤖 نام مدل (اختیاری):
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={item.model || ''}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'model', e.target.value)}
+                                    placeholder="مثلاً: llama-3.3-70b-versatile"
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono text-left dir-ltr"
                                   />
                                 </div>
                               </div>
@@ -1356,6 +1609,182 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3.6: Forbidden Keywords Filter (نکته پنجم) */}
+              <div className="p-4 rounded-2xl neu-inset bg-rose-500/5 border border-rose-500/20 space-y-3">
+                <div className="flex items-center gap-2 border-b border-rose-500/15 pb-2.5">
+                  <Filter className="w-5 h-5 text-rose-400" />
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-300">🚫 فیلتر کلمات ممنوعه (جلوگیری از ارسال پیام‌های حاوی کلمات خاص)</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      در صورت وجود هر یک از کلمات کلیدی زیر در پست کانال مبدأ، پیام کلا نادیده گرفته شده و به مقصد ارسال نمی‌شود.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newForbiddenWord}
+                    onChange={(e) => setNewForbiddenWord(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddForbiddenWord();
+                      }
+                    }}
+                    placeholder="کلمه ممنوعه جدید را وارد کنید (مثلاً: شرط بندی، قرعه کشی)..."
+                    className="flex-1 bg-black/40 border border-white/15 px-3 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-rose-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddForbiddenWord()}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>افزودن</span>
+                  </button>
+                </div>
+
+                {forbiddenKeywords.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 text-center py-1">
+                    هیچ کلمه ممنوعه‌ای ثبت نشده است. همه پست‌ها مجاز خواهند بود.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {forbiddenKeywords.map((word) => (
+                      <span
+                        key={word}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-950/60 text-rose-200 border border-rose-500/30 text-xs font-medium"
+                      >
+                        <span>{word}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveForbiddenWord(word)}
+                          className="hover:text-red-400 text-slate-400 transition-colors p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3.7: AI Ad Detection Filter (نکته سوم) */}
+              <div className="p-4 rounded-2xl neu-inset bg-purple-500/5 border border-purple-500/20 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-purple-500/15 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-purple-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-purple-300">📢 سیستم هوشمند تشخیص متن‌های تبلیغاتی و عدم ارسال (AI Ad Detector)</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        شناسایی خودکار پست‌های تبلیغاتی، آگهی فروش، رزرو تبلیغات و کانال‌های اسپانسر شده و نادیده گرفتن آنها
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-xl border border-purple-500/30 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={enableAdDetection}
+                      onChange={(e) => setEnableAdDetection(e.target.checked)}
+                      className="w-4 h-4 accent-purple-400 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-purple-200">فعال‌سازی ضد تبلیغات</span>
+                  </label>
+                </div>
+
+                {enableAdDetection && (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('keywords')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'keywords'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🏷️ کلمات کلیدی تبلیغاتی
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('ai')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'ai'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🤖 تشخیص با هوش مصنوعی
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('both')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'both'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ ترکیبی (کلمات + AI)
+                      </button>
+                    </div>
+
+                    {(adDetectionMethod === 'keywords' || adDetectionMethod === 'both') && (
+                      <div className="space-y-2 bg-black/30 p-3 rounded-xl border border-white/5">
+                        <label className="block text-[11px] font-bold text-slate-300">
+                          افزودن کلمه/عبارت تبلیغاتی سفارشی به دیتابیس هوشمند:
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newAdKeyword}
+                            onChange={(e) => setNewAdKeyword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddAdKeyword();
+                              }
+                            }}
+                            placeholder="عبارت تبلیغاتی جدید (مثلاً: تعرفه آگهی، ثبت آیدی)..."
+                            className="flex-1 bg-black/40 border border-white/15 px-3 py-1.5 text-xs rounded-xl text-white focus:outline-none focus:border-purple-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddAdKeyword()}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer"
+                          >
+                            افزودن
+                          </button>
+                        </div>
+
+                        {customAdKeywords.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {customAdKeywords.map((word) => (
+                              <span
+                                key={word}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-950/60 text-purple-200 border border-purple-500/30 text-[11px]"
+                              >
+                                <span>{word}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAdKeyword(word)}
+                                  className="hover:text-red-400 text-slate-400 transition-colors cursor-pointer"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
