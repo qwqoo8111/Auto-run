@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Radio, Send, Zap, ShieldCheck, User as UserIcon, LogOut, LogIn, UserPlus, Crown, Sun, Moon, Twitter, Sparkles } from 'lucide-react';
+import { Bot, Radio, Send, Zap, ShieldCheck, User as UserIcon, LogOut, LogIn, UserPlus, Crown, Sun, Moon, Twitter, Sparkles, Palette } from 'lucide-react';
 import { User } from '../types';
 
 interface HeaderProps {
@@ -12,7 +12,9 @@ interface HeaderProps {
   onOpenSubscriptions?: () => void;
   onOpenGlobalSupervisor?: () => void;
   onOpenSocialWebImporter?: () => void;
-  theme?: 'dark' | 'light';
+  onOpenAiSettings?: () => void;
+  onOpenThemeSelector?: () => void;
+  theme?: string;
   onToggleTheme?: () => void;
 }
 
@@ -26,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSubscriptions,
   onOpenGlobalSupervisor,
   onOpenSocialWebImporter,
+  onOpenAiSettings,
+  onOpenThemeSelector,
   theme = 'dark',
   onToggleTheme,
 }) => {
@@ -44,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-white tracking-wide">Auto run</h1>
+              <h1 className="text-2xl font-black text-white tracking-wide">AUTO RUN</h1>
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">
                 ربات فروارد خودکار
               </span>
@@ -72,6 +76,21 @@ export const Header: React.FC<HeaderProps> = ({
               {totalTransferred.toLocaleString('fa-IR')}
             </span>
           </div>
+
+          {/* Centralized AI Settings Button */}
+          {onOpenAiSettings && (
+            <button
+              onClick={onOpenAiSettings}
+              className="neu-button px-3.5 py-2 text-xs font-black text-purple-200 bg-gradient-to-r from-purple-600/30 via-indigo-600/30 to-purple-600/30 border border-purple-400/50 hover:border-purple-300 hover:bg-purple-500/30 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-purple-500/20 cursor-pointer"
+              title="مرکز تنظیمات متمرکز هوش مصنوعی، کلید API و بازنویسی خودکار"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>تنظیمات هوش مصنوعی</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 font-extrabold border border-amber-400/30">
+                اصلی
+              </span>
+            </button>
+          )}
 
           {/* Global Supervisor Bot Button */}
           {onOpenGlobalSupervisor && (
@@ -181,22 +200,34 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
+          {/* Theme Selector Button */}
+          {onOpenThemeSelector && (
+            <button
+              onClick={onOpenThemeSelector}
+              title="تغییر تم و قالب گرافیکی برنامه"
+              className="neu-button px-3 py-2 text-xs font-bold text-pink-300 bg-pink-500/15 border border-pink-500/30 hover:bg-pink-500/25 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Palette className="w-4 h-4 text-pink-400" />
+              <span className="hidden sm:inline">قالب‌ها</span>
+            </button>
+          )}
+
           {/* Theme Switcher Button */}
           {onToggleTheme && (
             <button
               onClick={onToggleTheme}
-              title={theme === 'dark' ? 'تغییر به تم روشن (روز)' : 'تغییر به تم تاریک (شب)'}
+              title="سویچ سریع بین روز و شب"
               className="neu-inset p-2.5 rounded-xl text-slate-300 hover:text-yellow-400 hover:border-yellow-400/40 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
             >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-4 h-4 text-yellow-400" />
-                  <span className="hidden sm:inline">تم روشن</span>
-                </>
-              ) : (
+              {theme === 'light' ? (
                 <>
                   <Moon className="w-4 h-4 text-purple-400" />
                   <span className="hidden sm:inline">تم تاریک</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-4 h-4 text-yellow-400" />
+                  <span className="hidden sm:inline">تم روشن</span>
                 </>
               )}
             </button>

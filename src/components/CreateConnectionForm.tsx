@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Loader2, AlertCircle, Bot, CheckCircle2, Crown } from 'lucide-react';
+import { Send, Loader2, AlertCircle, Bot, CheckCircle2, Crown, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { CreateConnectionDTO, User } from '../types';
 import { testBaleBot } from '../services/api';
 
@@ -8,6 +8,7 @@ interface CreateConnectionFormProps {
   isLoading: boolean;
   currentUser?: User | null;
   onOpenSubscriptions?: () => void;
+  onOpenAiSettings?: () => void;
 }
 
 export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
@@ -15,6 +16,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
   isLoading,
   currentUser,
   onOpenSubscriptions,
+  onOpenAiSettings,
 }) => {
   const isSubscribed = currentUser?.role === 'admin' || (currentUser?.plan !== 'free' && currentUser?.subscriptionStatus === 'active');
 
@@ -110,6 +112,30 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
         {/* Subtle Neumorphic Background Accents */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/5 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* Form Title & Quick AI Settings Bar */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-white/5">
+          <div>
+            <h2 className="text-base font-black text-white flex items-center gap-2">
+              <span>⚡ ساخت اتصال جدید و انتقال خودکار کانال</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              اطلاعات کانال مبدأ، مقصد و توکن ربات خود را وارد کنید
+            </p>
+          </div>
+
+          {onOpenAiSettings && (
+            <button
+              type="button"
+              onClick={onOpenAiSettings}
+              className="px-3.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-200 text-xs font-bold transition-all flex items-center gap-2 shadow cursor-pointer shrink-0"
+              title="تنظیمات هوش مصنوعی، کلید API و بازنویسی متون"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>⚙️ تنظیمات هوش مصنوعی</span>
+            </button>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           

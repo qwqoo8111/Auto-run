@@ -11,6 +11,14 @@ export interface TextReplacementRule {
   isRegex?: boolean;
 }
 
+export interface CustomServicePreset {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey?: string;
+  model?: string;
+}
+
 export interface AiFallbackItem {
   id: string;
   provider: AiProvider;
@@ -56,6 +64,14 @@ export interface AdvancedSettings {
   enableAdDetection?: boolean;
   adDetectionMethod?: 'ai' | 'keywords' | 'both';
   customAdKeywords?: string[];
+
+  // AI Settings
+  useDefaultAiEngine?: boolean;
+
+  // Telegram Proxy
+  enableProxy?: boolean;
+  proxyType?: 'mtproto' | 'socks5';
+  proxyUrl?: string;
 
   // Global Channel Supervisor
   enableGlobalSupervisor?: boolean;

@@ -2,17 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { 
   X, Plus, Trash2, Save, Sliders, Sparkles, CheckCircle2, RefreshCw, 
   Eye, Replace, FileText, Filter, Bot, ShieldCheck, Tag, Link2, Globe, Cpu, Key, Lock, Crown,
-  CopyCheck, ShieldAlert, Activity, Twitter, ArrowUp, ArrowDown, Layers
+  CopyCheck, ShieldAlert, Activity, Twitter, ArrowUp, ArrowDown, Layers, Radio, Zap
 } from 'lucide-react';
-import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User, AiFallbackItem } from '../types';
+import { TelegramConnection, AdvancedSettings, TextReplacementRule, RewriteMode, ContentFilter, AiProvider, User, AiFallbackItem, CustomServicePreset } from '../types';
 import { updateConnectionSettings, testAiApi, testBaleBot, cleanDuplicates } from '../services/api';
 
 interface AdvancedSettingsModalProps {
   connection: TelegramConnection | null;
+  isOpen?: boolean;
   onClose: () => void;
   onSaved: () => void;
   currentUser?: User | null;
   onOpenSubscriptions?: () => void;
+  allConnections?: TelegramConnection[];
 }
 
 const PROVIDERS: {
@@ -102,25 +104,6 @@ const PROVIDERS: {
     ],
   },
   {
-    id: 'openrouter',
-    name: 'OpenRouter AI',
-    badge: 'دسترسی جامع به همه مدل‌ها',
-    icon: '🚀',
-    color: 'border-violet-500/30 text-violet-300 bg-violet-950/20',
-    keyLink: 'https://openrouter.ai/keys',
-    keyTip: 'کلید API جامع از پلتفرم OpenRouter.ai',
-    models: [
-      { id: 'openrouter/auto', label: 'OpenRouter Auto (مسیریابی خودکار به بهترین مدل)' },
-      { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet (OpenRouter)' },
-      { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (OpenRouter)' },
-      { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (OpenRouter)' },
-      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B Instruct' },
-      { id: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash (OpenRouter)' },
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenRouter)' },
-      { id: 'custom', label: 'نام مدل سفارشی (تایپ دستی)' },
-    ],
-  },
-  {
     id: 'custom_openai',
     name: 'سرویس دلخواه / API هر سایت',
     badge: 'اتصال به API هر سایت یا Endpoint دلخواه',
@@ -143,10 +126,12 @@ const PROVIDERS: {
 
 export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   connection,
+  isOpen = false,
   onClose,
   onSaved,
   currentUser,
   onOpenSubscriptions,
+  allConnections = [],
 }) => {
   const isSubscribed = currentUser?.role === 'admin' || (currentUser?.plan !== 'free' && currentUser?.subscriptionStatus === 'active');
   const [rewriteMode, setRewriteMode] = useState<RewriteMode>('none');
@@ -158,6 +143,72 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [aiModel, setAiModel] = useState<string>('gemini-3.6-flash');
   const [aiCustomBaseUrl, setAiCustomBaseUrl] = useState<string>('https://openrouter.ai/api/v1');
   const [customModelInput, setCustomModelInput] = useState<string>('');
+
+  // Custom Services Presets Manager State
+  const [savedCustomServices, setSavedCustomServices] = useState<CustomServicePreset[]>(() => {
+    try {
+      const local = localStorage.getItem('autorun_saved_custom_services');
+      if (local) return JSON.parse(local);
+    } catch (e) {}
+    return [
+      { id: '1', name: '📡 9Router (Railway)', baseUrl: 'https://9router-production-6e0b.up.railway.app/v1', model: 'Mino' },
+      { id: '2', name: '⚡ Groq API', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+      { id: '3', name: '🌐 OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/auto' },
+      { id: '4', name: '🚀 Together AI', baseUrl: 'https://api.together.xyz/v1' },
+      { id: '5', name: '💻 Ollama (محلی)', baseUrl: 'http://localhost:11434/v1' },
+      { id: '6', name: '🐳 DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+    ];
+  });
+
+  const [showAddCustomModal, setShowAddCustomModal] = useState<boolean>(false);
+  const [newCustomName, setNewCustomName] = useState<string>('');
+  const [newCustomBaseUrl, setNewCustomBaseUrl] = useState<string>('');
+  const [newCustomApiKey, setNewCustomApiKey] = useState<string>('');
+  const [newCustomModel, setNewCustomModel] = useState<string>('');
+
+  const handleSaveNewCustomService = () => {
+    if (!newCustomBaseUrl.trim()) {
+      alert('لطفاً آدرس API (Base URL) سرویس را وارد کنید.');
+      return;
+    }
+    const name = newCustomName.trim() || newCustomBaseUrl.trim().replace(/^https?:\/\//i, '').split('/')[0] || 'سرویس سفارشی';
+    const newPreset: CustomServicePreset = {
+      id: Date.now().toString(),
+      name,
+      baseUrl: newCustomBaseUrl.trim(),
+      apiKey: newCustomApiKey.trim() || undefined,
+      model: newCustomModel.trim() || undefined,
+    };
+    const updated = [...savedCustomServices, newPreset];
+    setSavedCustomServices(updated);
+    try {
+      localStorage.setItem('autorun_saved_custom_services', JSON.stringify(updated));
+    } catch (e) {}
+
+    // Auto activate newly created custom service
+    setAiProvider('custom_openai');
+    setAiCustomBaseUrl(newPreset.baseUrl);
+    if (newPreset.apiKey) setAiApiKey(newPreset.apiKey);
+    if (newPreset.model) {
+      setAiModel(newPreset.model);
+      setCustomModelInput(newPreset.model);
+    }
+
+    setNewCustomName('');
+    setNewCustomBaseUrl('');
+    setNewCustomApiKey('');
+    setNewCustomModel('');
+    setShowAddCustomModal(false);
+  };
+
+  const handleDeleteCustomService = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = savedCustomServices.filter((s) => s.id !== id);
+    setSavedCustomServices(updated);
+    try {
+      localStorage.setItem('autorun_saved_custom_services', JSON.stringify(updated));
+    } catch (err) {}
+  };
 
   // AI Fallback Chain State
   const [enableAiFallbackChain, setEnableAiFallbackChain] = useState<boolean>(false);
@@ -213,63 +264,85 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   const [cleaningDuplicates, setCleaningDuplicates] = useState<boolean>(false);
   const [cleanDuplicatesResult, setCleanDuplicatesResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // Default AI Engine & Telegram Proxy State
+  const [useDefaultAiEngine, setUseDefaultAiEngine] = useState<boolean>(true);
+  const [enableProxy, setEnableProxy] = useState<boolean>(false);
+  const [proxyType, setProxyType] = useState<'mtproto' | 'socks5'>('mtproto');
+  const [proxyUrl, setProxyUrl] = useState<string>('');
+
   useEffect(() => {
+    let s: any = {};
     if (connection) {
-      const s = connection.settings || {};
-      setRewriteMode(s.rewriteMode || 'none');
-      setAiPrompt(s.aiPrompt || 'متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن:');
-      
-      const prov = s.aiProvider || 'gemini';
-      setAiProvider(prov);
-      setAiApiKey(s.aiApiKey || s.geminiApiKey || '');
-      let loadedModel = s.aiModel;
-      if (prov === 'gemini') {
-        if (!loadedModel || loadedModel === 'gemini-2.0-flash' || loadedModel === 'gemini-1.5-flash') {
-          loadedModel = 'gemini-3.6-flash';
-        } else if (loadedModel === 'gemini-1.5-pro') {
-          loadedModel = 'gemini-3.1-pro-preview';
-        }
-      } else if (!loadedModel) {
-        loadedModel = prov === 'openai' ? 'gpt-4o-mini' : prov === 'deepseek' ? 'deepseek-chat' : prov === 'claude' ? 'claude-3-5-sonnet-latest' : 'meta-llama/llama-3.3-70b-instruct';
+      s = connection.settings || {};
+    } else {
+      const cached = localStorage.getItem('centralized_ai_settings');
+      if (cached) {
+        try { s = JSON.parse(cached); } catch (e) {}
       }
-      setAiModel(loadedModel);
-      setAiCustomBaseUrl(s.aiCustomBaseUrl || 'https://openrouter.ai/api/v1');
+    }
 
-      setEnableAiFallbackChain(!!s.enableAiFallbackChain);
-      setAiFallbackChain(s.aiFallbackChain || []);
+    setUseDefaultAiEngine(s.useDefaultAiEngine !== undefined ? !!s.useDefaultAiEngine : true);
+    setEnableProxy(!!s.enableProxy);
+    setProxyType(s.proxyType || 'mtproto');
+    setProxyUrl(s.proxyUrl || '');
 
-      setReplacements(s.replacements || []);
-      setSignature(s.signature !== undefined ? s.signature : `🆔 ${connection.targetChannel}`);
-      setRemoveSourceLinks(s.removeSourceLinks !== undefined ? s.removeSourceLinks : true);
-      setCleanTagsAndLinks(!!s.cleanTagsAndLinks);
-      setContentFilter(s.contentFilter || 'all');
+    setRewriteMode(s.rewriteMode || (s.aiApiKey || localStorage.getItem('autorun_user_ai_api_key') ? 'ai' : 'none'));
+    setAiPrompt(s.aiPrompt || 'متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن:');
+    
+    const prov = s.aiProvider || 'gemini';
+    setAiProvider(prov);
+    setAiApiKey(s.aiApiKey || s.geminiApiKey || localStorage.getItem('autorun_user_ai_api_key') || '');
+    let loadedModel = s.aiModel || localStorage.getItem('autorun_user_ai_model');
+    if (prov === 'gemini') {
+      if (!loadedModel || loadedModel === 'gemini-2.0-flash' || loadedModel === 'gemini-1.5-flash') {
+        loadedModel = 'gemini-3.6-flash';
+      } else if (loadedModel === 'gemini-1.5-pro') {
+        loadedModel = 'gemini-3.1-pro-preview';
+      }
+    } else if (!loadedModel) {
+      loadedModel = prov === 'openai' ? 'gpt-4o-mini' : prov === 'deepseek' ? 'deepseek-chat' : prov === 'claude' ? 'claude-3-5-sonnet-latest' : 'meta-llama/llama-3.3-70b-instruct';
+    }
+    setAiModel(loadedModel);
+    setAiCustomBaseUrl(s.aiCustomBaseUrl || localStorage.getItem('autorun_user_ai_custom_base_url') || 'https://openrouter.ai/api/v1');
 
-      setForbiddenKeywords(s.forbiddenKeywords || []);
-      setEnableAdDetection(!!s.enableAdDetection);
-      setAdDetectionMethod(s.adDetectionMethod || 'keywords');
-      setCustomAdKeywords(s.customAdKeywords || []);
+    setEnableAiFallbackChain(!!s.enableAiFallbackChain);
+    setAiFallbackChain(s.aiFallbackChain || []);
 
-      setPreventDuplicates(s.preventDuplicates !== undefined ? !!s.preventDuplicates : true);
-      setDuplicateSimilarityThreshold(s.duplicateSimilarityThreshold ?? 80);
-      setDuplicateAction(s.duplicateAction || 'skip');
-      setCheckMediaDuplicate(s.checkMediaDuplicate !== undefined ? !!s.checkMediaDuplicate : true);
+    setReplacements(s.replacements || []);
+    setSignature(s.signature !== undefined ? s.signature : connection ? `🆔 ${connection.targetChannel}` : '🆔 @my_channel');
+    setRemoveSourceLinks(s.removeSourceLinks !== undefined ? s.removeSourceLinks : true);
+    setCleanTagsAndLinks(!!s.cleanTagsAndLinks);
+    setContentFilter(s.contentFilter || 'all');
 
-      setEnableBale(!!s.enableBale || !!connection.enableBale);
-      setBaleTargetChannel(s.baleTargetChannel || connection.baleTargetChannel || '');
-      setBaleBotToken(s.baleBotToken || connection.baleBotToken || '');
-      setBaleReplaceId(s.baleReplaceId || connection.baleReplaceId || '');
+    setForbiddenKeywords(s.forbiddenKeywords || []);
+    setEnableAdDetection(!!s.enableAdDetection);
+    setAdDetectionMethod(s.adDetectionMethod || 'keywords');
+    setCustomAdKeywords(s.customAdKeywords || []);
 
-      setEnableX(!!s.enableX || !!connection.enableX);
-      setXTargetHandles(s.xTargetHandles || connection.xTargetHandles || '');
-      setXApiKey(s.xApiKey || connection.xApiKey || '');
-      setEnableWeb(!!s.enableWeb || !!connection.enableWeb);
-      setWebTargetUrl(s.webTargetUrl || connection.webTargetUrl || '');
+    setPreventDuplicates(s.preventDuplicates !== undefined ? !!s.preventDuplicates : true);
+    setDuplicateSimilarityThreshold(s.duplicateSimilarityThreshold ?? 80);
+    setDuplicateAction(s.duplicateAction || 'skip');
+    setCheckMediaDuplicate(s.checkMediaDuplicate !== undefined ? !!s.checkMediaDuplicate : true);
 
-      if (isTwitterSource) {
+    setEnableBale(!!s.enableBale || !!connection?.enableBale);
+    setBaleTargetChannel(s.baleTargetChannel || connection?.baleTargetChannel || '');
+    setBaleBotToken(s.baleBotToken || connection?.baleBotToken || '');
+    setBaleReplaceId(s.baleReplaceId || connection?.baleReplaceId || '');
+
+    setEnableX(!!s.enableX || !!connection?.enableX);
+    setXTargetHandles(s.xTargetHandles || connection?.xTargetHandles || '');
+    setXApiKey(s.xApiKey || connection?.xApiKey || '');
+    setEnableWeb(!!s.enableWeb || !!connection?.enableWeb);
+    setWebTargetUrl(s.webTargetUrl || connection?.webTargetUrl || '');
+
+    if (connection) {
+      const isTwitter = connection.sourceType === 'twitter' || connection.sourceChannel?.toLowerCase().includes('twitter.com') || connection.sourceChannel?.toLowerCase().includes('x.com');
+      const isWeb = connection.sourceType === 'website' || connection.sourceChannel?.toLowerCase().includes('http');
+      if (isTwitter) {
         setSampleText(
           `توییت جدید از ${connection.sourceChannel}:\nOur team is rolling out new updates today! Read more at https://t.co/xyz123\n#Twitter #Tech`
         );
-      } else if (isWebsiteSource) {
+      } else if (isWeb) {
         setSampleText(
           `خبر جدید در وب‌سایت ${connection.sourceChannel}:\nگزارش‌های تازه نشان می‌دهد که مطالب جدید منتشر شده است.\nلینک مطلب: https://example.com/news/100`
         );
@@ -278,10 +351,14 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
           `پست جدید در کانال ${connection.sourceChannel}\nبرای خرید و ثبت سفارش به آیدی ${connection.sourceChannel} پیام دهید.\nلینک کانال: https://t.me/${connection.sourceChannel.replace('@', '')}\n#فروشگاه #تخفیف`
         );
       }
+    } else {
+      setSampleText(
+        `پست نمونه جهت تست هوش مصنوعی و بازنویسی متون\nبرای کسب اطلاعات بیشتر و دیدن آخرین اخبار کلیک کنید.\nلینک: https://t.me/example_channel\n#اخبار #تکنولوژی`
+      );
     }
-  }, [connection]);
+  }, [connection, isOpen]);
 
-  if (!connection) return null;
+  if (!connection && !isOpen) return null;
 
   const isTwitterSource = connection?.sourceType === 'twitter' || connection?.sourceChannel?.toLowerCase().includes('twitter.com') || connection?.sourceChannel?.toLowerCase().includes('x.com');
   const isWebsiteSource = connection?.sourceType === 'website' || connection?.sourceChannel?.toLowerCase().includes('http');
@@ -301,8 +378,9 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     setAiTestResult(null);
     setAiTestError(null);
 
-    if (!aiApiKey.trim()) {
-      setAiTestError('وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. کلید پیش‌فرض سیستم حذف گردیده است.');
+    const activeApiKey = aiApiKey.trim() || localStorage.getItem('autorun_user_ai_api_key') || '';
+    if (!activeApiKey && !useDefaultAiEngine) {
+      setAiTestError('کلید API یا موتور متمرکز سیستم تنظیم نشده است. لطفاً ابتدا در مرکز تنظیمات هوش مصنوعی کلید API را ثبت نمایید.');
       setTestingAi(false);
       return;
     }
@@ -312,7 +390,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     try {
       const data = await testAiApi({
         provider: aiProvider,
-        apiKey: aiApiKey.trim(),
+        apiKey: activeApiKey,
         model: activeModel,
         customBaseUrl: aiCustomBaseUrl.trim(),
         prompt: aiPrompt.trim(),
@@ -393,8 +471,8 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   };
 
   const handleQuickAddSourceReplace = () => {
-    const cleanSource = connection.sourceChannel.replace(/^@/, '');
-    const cleanTarget = connection.targetChannel.replace(/^@/, '');
+    const cleanSource = (connection?.sourceChannel || '').replace(/^@/, '');
+    const cleanTarget = (connection?.targetChannel || '').replace(/^@/, '');
     setReplacements([
       ...replacements,
       {
@@ -419,8 +497,8 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       return cleaned.trim();
     };
 
-    const cleanSource = connection.sourceChannel.replace(/^@/, '');
-    const cleanTarget = connection.targetChannel.replace(/^@/, '');
+    const cleanSource = (connection?.sourceChannel || '').replace(/^@/, '');
+    const cleanTarget = (connection?.targetChannel || '').replace(/^@/, '');
 
     // 1. Clean Source Links & Handles
     if (removeSourceLinks || cleanTagsAndLinks) {
@@ -554,8 +632,8 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
     setSaving(true);
     setSavedSuccess(false);
 
-    if (rewriteMode === 'ai' && !aiApiKey.trim()) {
-      alert('وارد کردن کلید API اختصاصی هوش مصنوعی الزامی است. جهت استفاده از بازنویسی با هوش مصنوعی، لطفاً کلید API خود را وارد کنید.');
+    if (rewriteMode === 'ai' && !useDefaultAiEngine && !aiApiKey.trim() && !localStorage.getItem('autorun_user_ai_api_key')) {
+      alert('لطفاً کلید API اختصاصی هوش مصنوعی را وارد کرده یا گزینه‌ی استفاده از موتور پیش‌فرض سیستم را فعال نمایید.');
       setSaving(false);
       return;
     }
@@ -564,6 +642,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
       const activeModel = aiModel === 'custom' ? customModelInput.trim() : aiModel;
       const newSettings: AdvancedSettings = {
         rewriteMode,
+        useDefaultAiEngine,
         aiPrompt,
         aiProvider,
         aiApiKey,
@@ -590,12 +669,35 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         xApiKey: xApiKey.trim(),
         enableWeb,
         webTargetUrl: webTargetUrl.trim(),
+        enableProxy,
+        proxyType,
+        proxyUrl: proxyUrl.trim(),
         preventDuplicates,
         duplicateSimilarityThreshold,
         duplicateAction,
         checkMediaDuplicate,
       };
-      await updateConnectionSettings(connection.id, newSettings);
+      // Always save to global localStorage cache
+      localStorage.setItem('centralized_ai_settings', JSON.stringify(newSettings));
+      localStorage.setItem('autorun_user_ai_api_key', aiApiKey.trim());
+      localStorage.setItem('autorun_user_ai_model', activeModel);
+      localStorage.setItem('autorun_user_ai_custom_base_url', aiCustomBaseUrl.trim());
+
+      if (connection) {
+        await updateConnectionSettings(connection.id, newSettings);
+      } else if (allConnections && allConnections.length > 0) {
+        for (const conn of allConnections) {
+          try {
+            await updateConnectionSettings(conn.id, {
+              ...(conn.settings || {}),
+              ...newSettings,
+            });
+          } catch (e) {
+            console.warn(`Failed updating connection ${conn.id}:`, e);
+          }
+        }
+      }
+
       setSavedSuccess(true);
       onSaved();
       setTimeout(() => {
@@ -617,11 +719,13 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
         <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/30">
           <div className="flex items-center gap-3">
             <div className="p-2.5 neu-inset rounded-xl text-yellow-400">
-              {isTwitterSource ? <Twitter className="w-5 h-5 text-sky-400" /> : isWebsiteSource ? <Globe className="w-5 h-5 text-purple-400" /> : <Sliders className="w-5 h-5" />}
+              {!connection ? <Sparkles className="w-5 h-5 text-amber-300" /> : isTwitterSource ? <Twitter className="w-5 h-5 text-sky-400" /> : isWebsiteSource ? <Globe className="w-5 h-5 text-purple-400" /> : <Sliders className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="text-base font-black text-white flex items-center gap-2">
-                {isTwitterSource ? (
+                {!connection ? (
+                  <span>مرکز تنظیمات متمرکز هوش مصنوعی و اتوماسیون</span>
+                ) : isTwitterSource ? (
                   <span>تنظیمات پیشرفته اختصاصی توییتر (X)</span>
                 ) : isWebsiteSource ? (
                   <span>تنظیمات پیشرفته اختصاصی وب‌سایت (RSS)</span>
@@ -630,7 +734,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                 )}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5 dir-ltr text-right">
-                {connection.sourceChannel} ➔ {connection.targetChannel}
+                {!connection ? 'پیکربندی کلید API اصلی، هوش مصنوعی، مدل و قوانین بازنویسی' : `${connection.sourceChannel} ➔ ${connection.targetChannel}`}
               </p>
             </div>
           </div>
@@ -679,7 +783,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <div className="text-xs">
                     <span className="font-bold text-white block">حذف لینک مبدأ (حذف لینک‌های توییتر، t.co و آیدی پیج مبدأ)</span>
                     <span className="text-slate-400 mt-0.5 block text-[11px] leading-relaxed">
-                      با فعال بودن این گزینه، لینک‌های اختصاصی توییت (twitter.com / x.com / t.co) و آیدی حساب توییتر {connection.sourceChannel} از متن توییت پاکسازی می‌شوند تا لینک پیج مبدا یا لینکهای t.co در پیام نباشد.
+                      با فعال بودن این گزینه، لینک‌های اختصاصی توییت (twitter.com / x.com / t.co) و آیدی حساب توییتر {connection?.sourceChannel || 'مبدأ'} از متن توییت پاکسازی می‌شوند تا لینک پیج مبدا یا لینکهای t.co در پیام نباشد.
                     </span>
                   </div>
                 </label>
@@ -695,7 +799,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <textarea
                     value={signature}
                     onChange={(e) => setSignature(e.target.value)}
-                    placeholder={`مثال:\n🆔 ${connection.targetChannel}\n📢 عضویت در کانال: t.me/${connection.targetChannel.replace('@', '')}`}
+                    placeholder={`مثال:\n🆔 ${connection?.targetChannel || '@my_channel'}\n📢 عضویت در کانال: t.me/${(connection?.targetChannel || '@my_channel').replace('@', '')}`}
                     rows={3}
                     className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
                   />
@@ -756,13 +860,23 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <div className="neu-inset p-4 space-y-4 rounded-xl border border-purple-500/30 bg-purple-950/15">
                     <div className="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
                       <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                        <Bot className="w-4.5 h-4.5 text-purple-400" />
-                        <span>تنظیمات موتور هوش مصنوعی برای اخبار</span>
+                        <Globe className="w-4.5 h-4.5 text-purple-400" />
+                        <span>🌐 مرکز تنظیمات متمرکز و یکپارچه هوش مصنوعی سیستم</span>
                       </div>
                       <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1">
                         <span>{currentProviderConfig.icon}</span>
                         <span>{currentProviderConfig.name}</span>
                       </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-purple-900/20 border border-purple-500/30 text-[11px] text-purple-200 leading-relaxed space-y-1">
+                      <div className="font-bold text-amber-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>راهنمای تنظیمات متمرکز هوش مصنوعی:</span>
+                      </div>
+                      <p>
+                        با یک‌بار پیکربندی هوش مصنوعی و کلید API در این بخش، تمام امکانات سیستم (بازنویسی خودکار، سیستم ضد تبلیغات، کاوش ترندها و ابزار شبکه اجتماعی) به طور یکپارچه از همین تنظیمات استفاده می‌کنند و نیازی به وارد کردن مجدد API در بخش‌های دیگر نیست.
+                      </p>
                     </div>
 
                     <div className="space-y-1.5">
@@ -865,6 +979,35 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                                   </button>
                                 </div>
                               </div>
+
+                              {savedCustomServices.length > 0 && (
+                                <div className="bg-purple-950/40 p-2 rounded-xl border border-purple-500/30">
+                                  <label className="block text-[10px] font-bold text-purple-200 mb-1">
+                                    ⚡ پر کردن سریع از سرویس‌های ذخیره‌شده شما:
+                                  </label>
+                                  <select
+                                    onChange={(e) => {
+                                      const selectedId = e.target.value;
+                                      const found = savedCustomServices.find((s) => s.id === selectedId);
+                                      if (found) {
+                                        handleFallbackItemChange(item.id, 'provider', 'custom_openai');
+                                        handleFallbackItemChange(item.id, 'customBaseUrl', found.baseUrl);
+                                        if (found.apiKey) handleFallbackItemChange(item.id, 'apiKey', found.apiKey);
+                                        if (found.model) handleFallbackItemChange(item.id, 'model', found.model);
+                                      }
+                                    }}
+                                    defaultValue=""
+                                    className="w-full bg-slate-900 border border-purple-500/40 px-2.5 py-1.5 text-xs rounded-lg text-white font-medium"
+                                  >
+                                    <option value="" disabled>-- انتخاب سرویس ذخیره‌شده برای این اولویت --</option>
+                                    {savedCustomServices.map((srv) => (
+                                      <option key={srv.id} value={srv.id}>
+                                        {srv.name} ({srv.baseUrl})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
@@ -1021,7 +1164,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <textarea
                     value={signature}
                     onChange={(e) => setSignature(e.target.value)}
-                    placeholder={`مثال:\n🆔 ${connection.targetChannel}`}
+                    placeholder={`مثال:\n🆔 ${connection?.targetChannel || '@my_channel'}`}
                     rows={3}
                     className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
                   />
@@ -1105,7 +1248,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     <div className="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
                       <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
                         <Bot className="w-4.5 h-4.5 text-purple-400" />
-                        <span>تنظیمات موتور هوش مصنوعی</span>
+                        <span>تنظیمات بازنویسی و تولید محتوا با هوش مصنوعی (AI)</span>
                       </div>
                       <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1">
                         <span>{currentProviderConfig.icon}</span>
@@ -1113,369 +1256,285 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       </span>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-purple-200">
-                        ۱. انتخاب سرویس هوش مصنوعی (Provider):
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                        {PROVIDERS.map((p) => (
-                          <button
-                            type="button"
-                            key={p.id}
-                            onClick={() => handleProviderSelect(p.id)}
-                            className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
-                              aiProvider === p.id
-                                ? 'bg-purple-600/25 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
-                                : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
-                            }`}
-                          >
-                            <span className="text-base">{p.icon}</span>
-                            <span className="text-xs font-bold line-clamp-1">{p.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 2. Model Selection */}
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-purple-200">
-                        ۲. انتخاب مدل هوش مصنوعی:
-                      </label>
-                      <select
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
-                      >
-                        {currentProviderConfig.models.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      {(aiModel === 'custom' || aiProvider === 'custom_openai') && (
-                        <input
-                          type="text"
-                          value={customModelInput}
-                          onChange={(e) => setCustomModelInput(e.target.value)}
-                          placeholder="نام مدل سفارشی دلخواه را وارد کنید (مثلاً: llama-3.3-70b-versatile یا gpt-4o)..."
-                          className="w-full bg-black/70 border border-purple-500/40 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-300 font-mono mt-1.5"
-                        />
-                      )}
-                    </div>
-
-                    {/* 3. Custom API Base URL for ANY Site/Server (نکته اول) */}
-                    <div className="space-y-2 p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/35 shadow-inner">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <label className="block text-xs font-bold text-blue-200 flex items-center gap-1.5">
-                          <Globe className="w-4 h-4 text-blue-400" />
-                          <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
-                        </label>
-                        <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
-                          نکته مهم: قابلیت دادن API هر سایت
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        با وارد کردن آدرس Base URL در این قسمت، می‌توانید از API اختصاصی <b>هر سایت، ارائه‌دهنده یا سرور شخصی</b> (مانند OpenAI-compatible API، Groq، Together AI، Ollama، OpenRouter و غیره) استفاده نمایید:
-                      </p>
-                      <input
-                        type="text"
-                        value={aiCustomBaseUrl}
-                        onChange={(e) => setAiCustomBaseUrl(e.target.value)}
-                        placeholder="https://api.your-custom-site.com/v1 یا http://localhost:11434/v1"
-                        className="w-full bg-black/70 border border-white/20 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
-                      />
-                      <div className="flex gap-1.5 flex-wrap pt-0.5">
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای آماده:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('custom_openai');
-                            setAiCustomBaseUrl('https://9router-production-6e0b.up.railway.app/v1');
-                            setAiModel('Mino');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 border border-emerald-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          📡 9Router (Railway)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('custom_openai');
-                            setAiCustomBaseUrl('https://api.groq.com/openai/v1');
-                            setAiModel('llama-3.3-70b-versatile');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          ⚡ Groq API
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('openrouter');
-                            setAiCustomBaseUrl('https://openrouter.ai/api/v1');
-                            setAiModel('openrouter/auto');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          🌐 OpenRouter
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('custom_openai');
-                            setAiCustomBaseUrl('https://api.together.xyz/v1');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          🚀 Together AI
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('custom_openai');
-                            setAiCustomBaseUrl('http://localhost:11434/v1');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          💻 Ollama (محلی)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAiProvider('deepseek');
-                            setAiCustomBaseUrl('https://api.deepseek.com');
-                          }}
-                          className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                        >
-                          🐳 DeepSeek
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-purple-200">
-                        ۴. کلید API اختصاصی:
-                      </label>
-                      <input
-                        type="password"
-                        value={aiApiKey}
-                        onChange={(e) => setAiApiKey(e.target.value)}
-                        placeholder="کلید API خود را وارد کنید..."
-                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-purple-200">
-                        ۵. نوشتن پرامپت و دستورات برای ربات (دستور بازنویسی و لحن):
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        placeholder="دستورات و لحن بازنویسی ربات را بنویسید (مثلاً: متن را خلاصه و جذاب با ایموجی بازنویسی کن)..."
-                        className="w-full bg-black/60 border border-white/15 p-2.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-sans leading-relaxed"
-                      />
-                      <div className="flex gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setAiPrompt('متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن:')}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
-                        >
-                          ✨ استاندارد و جذاب
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAiPrompt('متن زیر را خلاصه‌سازی کن و نکات کلیدی آن را با ایموجی‌های مرتبط تیتروار بنویس:')}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
-                        >
-                          📌 خلاصه‌سازی تیتروار
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAiPrompt('متن زیر را به لحن کاملاً رسمی و تخصصی ترجمه و بازنویسی کن:')}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all"
-                        >
-                          👔 لحن رسمی
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* AI API Test Connection Button */}
-                    <div className="p-3 neu-inset rounded-xl bg-purple-900/20 border border-purple-500/30 space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
-                          <Activity className="w-4 h-4 text-purple-400" />
-                          <span>تست وصل بودن API و بررسی لایو اتصال هوش مصنوعی:</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleTestAi}
-                          disabled={testingAi}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 border border-purple-400/40 shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                        >
-                          {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                          <span>{testingAi ? 'در حال تست API...' : '🧪 تست وصل بودن API'}</span>
-                        </button>
-                      </div>
-
-                      {aiTestResult && (
-                        <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs dir-rtl space-y-1">
-                          <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>ارتباط API موفقیت‌آمیز بود! (پاسخ دریافتی از هوش مصنوعی):</span>
-                          </div>
-                          <p className="text-[11px] bg-black/40 p-2 rounded border border-emerald-500/20 leading-relaxed font-sans text-slate-100">
-                            {aiTestResult}
-                          </p>
-                        </div>
-                      )}
-
-                      {aiTestError && (
-                        <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
-                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                          <span>{aiTestError}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Fallback Chain / Priority AI Configuration */}
-                    <div className="pt-3 border-t border-purple-500/20 space-y-3">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                    {/* Streamlined Connection View: Uses Central AI Engine */}
+                    {connection ? (
+                      <div className="space-y-3">
+                        {/* Toggle for Default Engine */}
+                        <label className="flex items-start gap-3 p-3 rounded-xl bg-purple-900/30 border border-purple-500/40 cursor-pointer hover:bg-purple-900/40 transition-colors">
                           <input
                             type="checkbox"
-                            checked={enableAiFallbackChain}
-                            onChange={(e) => setEnableAiFallbackChain(e.target.checked)}
-                            className="w-4 h-4 rounded text-purple-500 focus:ring-purple-400 bg-slate-900 border-white/20 cursor-pointer"
+                            checked={useDefaultAiEngine}
+                            onChange={(e) => setUseDefaultAiEngine(e.target.checked)}
+                            className="w-4 h-4 mt-0.5 accent-purple-400 rounded cursor-pointer"
                           />
-                          <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
-                            <Layers className="w-4 h-4 text-purple-400" />
-                            <span>سوییچ خودکار و زنجیره هوش مصنوعی (Fallback & Priority Chain)</span>
-                          </span>
+                          <div className="text-xs">
+                            <span className="font-bold text-purple-200 block">
+                              استفاده از موتور پیش‌فرض هوش مصنوعی سیستم (موتور مرکزی)
+                            </span>
+                            <span className="text-slate-300 mt-0.5 block text-[11px] leading-relaxed">
+                              با فعال بودن این گزینه، عملیات بازنویسی از تنظیمات مرکزی هوش مصنوعی و کلید اصلی سیستم استفاده خواهد کرد.
+                            </span>
+                          </div>
                         </label>
-                        <span className="text-[10px] text-purple-300/80 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
-                          در صورت اتمام سهمیه یا خطای API اصلی
-                        </span>
-                      </div>
 
-                      {enableAiFallbackChain && (
-                        <div className="space-y-3 pt-2 animate-fadeIn">
-                          <p className="text-[11px] text-slate-300 leading-relaxed bg-black/30 p-2.5 rounded-xl border border-white/5">
-                            💡 راهنما: ابتدا هوش مصنوعی اصلی بالا اجرا می‌شود. در صورت بروز خطا، اتمام شارژ یا پاسخ ندادن API، سیستم به ترتیب اولویت‌های زیر سوییچ اتوماتیک می‌کند.
-                          </p>
+                        {!useDefaultAiEngine && (
+                          <div className="space-y-1.5 pt-1 animate-fadeIn">
+                            <label className="block text-xs font-bold text-purple-200">
+                              کلید API اختصاصی برای این کانال (اختیاری):
+                            </label>
+                            <input
+                              type="password"
+                              value={aiApiKey}
+                              onChange={(e) => setAiApiKey(e.target.value)}
+                              placeholder="کلید API اختصاصی را وارد کنید..."
+                              className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                            />
+                          </div>
+                        )}
 
-                          {aiFallbackChain.map((item, idx) => (
-                            <div key={item.id} className="p-3 rounded-xl bg-black/50 border border-purple-500/30 space-y-2.5">
-                              <div className="flex items-center justify-between text-xs font-bold text-purple-300 border-b border-white/10 pb-1.5">
-                                <span className="flex items-center gap-1">
-                                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black flex items-center justify-center border border-purple-500/30">
-                                    {idx + 1}
-                                  </span>
-                                  <span>اولویت جایگزین #{idx + 1}</span>
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMoveFallbackItem(idx, 'up')}
-                                    disabled={idx === 0}
-                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
-                                    title="انتقال به بالا"
-                                  >
-                                    <ArrowUp className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMoveFallbackItem(idx, 'down')}
-                                    disabled={idx === aiFallbackChain.length - 1}
-                                    className="p-1 hover:bg-white/10 rounded text-slate-400 disabled:opacity-30 cursor-pointer"
-                                    title="انتقال به پایین"
-                                  >
-                                    <ArrowDown className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveFallbackItem(item.id)}
-                                    className="p-1 hover:bg-red-500/20 rounded text-red-400 cursor-pointer"
-                                    title="حذف"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                        {/* Prompt & Instructions */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-purple-200">
+                            نمایش پرامپت و دستورات برای ربات (دستور بازنویسی و لحن):
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            placeholder="دستورات و لحن بازنویسی ربات را بنویسید (مثلاً: متن را خلاصه و جذاب با ایموجی بازنویسی کن)..."
+                            className="w-full bg-black/60 border border-white/15 p-2.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-sans leading-relaxed"
+                          />
+                          <div className="flex gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setAiPrompt('متن زیر را به صورت جذاب، روان، خوانا و پرمخاطب بازنویسی کن:')}
+                              className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all cursor-pointer"
+                            >
+                              ✨ استاندارد و جذاب
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAiPrompt('متن زیر را خلاصه‌سازی کن و نکات کلیدی آن را با ایموجی‌های مرتبط تیتروار بنویس:')}
+                              className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all cursor-pointer"
+                            >
+                              📌 خلاصه‌سازی تیتروار
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAiPrompt('متن زیر را به لحن کاملاً رسمی و تخصصی ترجمه و بازنویسی کن:')}
+                              className="text-[10px] px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all cursor-pointer"
+                            >
+                              👔 لحن رسمی
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* AI API Test Connection Button */}
+                        <div className="p-3 neu-inset rounded-xl bg-purple-900/20 border border-purple-500/30 space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                              <Activity className="w-4 h-4 text-purple-400" />
+                              <span>تست اتصال API و بررسی لایو اتصال هوش مصنوعی:</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleTestAi}
+                              disabled={testingAi}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 border border-purple-400/40 shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                            >
+                              {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                              <span>{testingAi ? 'در حال تست API...' : '🧪 تست وصل بودن API'}</span>
+                            </button>
+                          </div>
+
+                          {aiTestResult && (
+                            <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs dir-rtl space-y-1">
+                              <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>ارتباط API موفقیت‌آمیز بود! (پاسخ دریافتی):</span>
                               </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                                    سرویس هوش مصنوعی:
-                                  </label>
-                                  <select
-                                    value={item.provider}
-                                    onChange={(e) => handleFallbackItemChange(item.id, 'provider', e.target.value as AiProvider)}
-                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
-                                  >
-                                    {PROVIDERS.map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.icon} {p.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                                    کلید API اختصاصی:
-                                  </label>
-                                  <input
-                                    type="password"
-                                    value={item.apiKey}
-                                    onChange={(e) => handleFallbackItemChange(item.id, 'apiKey', e.target.value)}
-                                    placeholder="کلید API جایگزین..."
-                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                                    🌐 آدرس سایت API (Base URL دلخواه):
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={item.customBaseUrl || ''}
-                                    onChange={(e) => handleFallbackItemChange(item.id, 'customBaseUrl', e.target.value)}
-                                    placeholder="https://api.your-custom-site.com/v1"
-                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono text-left dir-ltr"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                                    🤖 نام مدل (اختیاری):
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={item.model || ''}
-                                    onChange={(e) => handleFallbackItemChange(item.id, 'model', e.target.value)}
-                                    placeholder="مثلاً: llama-3.3-70b-versatile"
-                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono text-left dir-ltr"
-                                  />
-                                </div>
-                              </div>
+                              <p className="text-[11px] bg-black/40 p-2 rounded border border-emerald-500/20 leading-relaxed font-sans text-slate-100">
+                                {aiTestResult}
+                              </p>
                             </div>
-                          ))}
+                          )}
 
+                          {aiTestError && (
+                            <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+                              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                              <span>{aiTestError}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Full Global Central AI Settings Panel when opened via Main AI Settings */
+                      <div className="space-y-4">
+                        <div className="p-3 rounded-xl bg-purple-900/20 border border-purple-500/30 text-[11px] text-purple-200 leading-relaxed space-y-1">
+                          <div className="font-bold text-amber-300 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span>تنظیمات یکپارچه AI:</span>
+                          </div>
+                          <p>
+                            کلید API و سرویس انتخابی شما در این بخش، به عنوان هوش مصنوعی اصلی برای تمام بخش‌های سیستم فعال خواهد بود.
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-purple-200">
+                            ۱. انتخاب سرویس هوش مصنوعی (Provider):
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                            {PROVIDERS.map((p) => (
+                              <button
+                                type="button"
+                                key={p.id}
+                                onClick={() => handleProviderSelect(p.id)}
+                                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                                  aiProvider === p.id
+                                    ? 'bg-purple-600/25 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
+                                    : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
+                                }`}
+                              >
+                                <span className="text-base">{p.icon}</span>
+                                <span className="text-xs font-bold line-clamp-1">{p.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-purple-200">
+                            ۲. انتخاب مدل هوش مصنوعی:
+                          </label>
+                          <select
+                            value={aiModel}
+                            onChange={(e) => setAiModel(e.target.value)}
+                            className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-bold"
+                          >
+                            {currentProviderConfig.models.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          {(aiModel === 'custom' || aiProvider === 'custom_openai') && (
+                            <input
+                              type="text"
+                              value={customModelInput}
+                              onChange={(e) => setCustomModelInput(e.target.value)}
+                              placeholder="نام مدل سفارشی دلخواه را وارد کنید..."
+                              className="w-full bg-black/70 border border-purple-500/40 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-300 font-mono mt-1.5"
+                            />
+                          )}
+                        </div>
+
+                        {/* Custom Base URL */}
+                        <div className="space-y-2 p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/35 shadow-inner">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <label className="block text-xs font-bold text-blue-200 flex items-center gap-1.5">
+                              <Globe className="w-4 h-4 text-blue-400" />
+                              <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
+                            </label>
+                            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
+                              قابلیت اتصال به API هر سایت
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={aiCustomBaseUrl}
+                            onChange={(e) => setAiCustomBaseUrl(e.target.value)}
+                            placeholder="https://api.your-custom-site.com/v1"
+                            className="w-full bg-black/70 border border-white/20 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-purple-200">
+                            ۳. کلید API اختصاصی مرکز:
+                          </label>
+                          <input
+                            type="password"
+                            value={aiApiKey}
+                            onChange={(e) => setAiApiKey(e.target.value)}
+                            placeholder="کلید API خود را وارد کنید..."
+                            className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-purple-200">
+                            ۴. پرامپت و دستورات پیش‌فرض ربات:
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            className="w-full bg-black/60 border border-white/15 p-2.5 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-sans leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Test Connection Button */}
+                        <div className="p-3 neu-inset rounded-xl bg-purple-900/20 border border-purple-500/30 flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-200">تست اتصال API و بررسی لایو:</span>
                           <button
                             type="button"
-                            onClick={handleAddFallbackItem}
-                            className="w-full py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            onClick={handleTestAi}
+                            disabled={testingAi}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 border border-purple-400/40 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                           >
-                            <Plus className="w-4 h-4 text-purple-400" />
-                            <span>افزودن هوش مصنوعی جدید به زنجیره اولویت‌ها</span>
+                            {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            <span>{testingAi ? 'در حال تست...' : '🧪 تست لایو API'}</span>
                           </button>
                         </div>
-                      )}
-                    </div>
+
+                        {/* Fallback Priority Chain */}
+                        <div className="pt-3 border-t border-purple-500/20 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={enableAiFallbackChain}
+                                onChange={(e) => setEnableAiFallbackChain(e.target.checked)}
+                                className="w-4 h-4 rounded text-purple-500 focus:ring-purple-400 bg-slate-900 border-white/20 cursor-pointer"
+                              />
+                              <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                                <Layers className="w-4 h-4 text-purple-400" />
+                                <span>سوییچ خودکار و زنجیره هوش مصنوعی (Fallback & Priority Chain)</span>
+                              </span>
+                            </label>
+                          </div>
+
+                          {enableAiFallbackChain && (
+                            <div className="space-y-3 pt-2 animate-fadeIn">
+                              {aiFallbackChain.map((item, idx) => (
+                                <div key={item.id} className="p-3 rounded-xl bg-black/50 border border-purple-500/30 space-y-2.5">
+                                  <div className="flex items-center justify-between text-xs font-bold text-purple-300 border-b border-white/10 pb-1.5">
+                                    <span>اولویت جایگزین #{idx + 1}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveFallbackItem(item.id)}
+                                      className="p-1 text-red-400 hover:bg-red-500/20 rounded"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={handleAddFallbackItem}
+                                className="w-full py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Plus className="w-4 h-4 text-purple-400" />
+                                <span>افزودن هوش مصنوعی جدید به زنجیره اولویت‌ها</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1554,7 +1613,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     <div className="text-xs">
                       <span className="font-bold text-white block">حذف خودکار تمام لینک‌ها، منشن‌ها و آیدی‌های تلگرامی کانال مبدأ</span>
                       <span className="text-slate-400 mt-0.5 block text-[11px]">
-                        جایگزینی یا حذف آیدی {connection.sourceChannel} و لینک‌های t.me مربوط به آن
+                        جایگزینی یا حذف آیدی {connection?.sourceChannel || 'مبدأ'} و لینک‌های t.me مربوط به آن
                       </span>
                     </div>
                   </label>
@@ -1751,6 +1810,38 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       </button>
                     </div>
 
+                    {/* Explanation and Active AI Model badge when AI ad detection is active */}
+                    {(adDetectionMethod === 'ai' || adDetectionMethod === 'both') && (
+                      <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-500/40 space-y-2.5 shadow-sm text-xs">
+                        <div className="flex items-center justify-between flex-wrap gap-2 border-b border-purple-500/30 pb-2">
+                          <span className="font-bold text-purple-200 flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-purple-400" />
+                            <span>راهنمای سیستم تشخیص هوشمند تبلیغات با هوش مصنوعی:</span>
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/30 text-purple-200 font-bold border border-purple-500/40">
+                            موتور پردازش زبانی
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          <b>💡 چرا تشخیص با هوش مصنوعی؟</b> کلمات کلیدی ثابت ممکن است تبلیغات متنی پیچیده، بنرهای غیرمستقیم، آگهی‌های پنهان فروش یا لینک‌های دعوت به کانال‌ها را نادیده بگیرند. هوش مصنوعی متن کامل پست را به شکل مفهومی تحلیل کرده و ماهیت تبلیغاتی آن را تشخیص می‌دهد.
+                        </p>
+                        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 bg-black/40 p-2.5 rounded-lg border border-white/10">
+                          <div className="flex items-center gap-2">
+                            <Bot className="w-4 h-4 text-purple-400" />
+                            <span className="text-[11px] text-purple-200 font-bold">
+                              سرویس هوش مصنوعی فعال برای ضد تبلیغات:
+                            </span>
+                            <span className="text-[11px] font-black text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                              {currentProviderConfig.icon} {currentProviderConfig.name} ({aiModel === 'custom' ? (customModelInput || 'سفارشی') : aiModel})
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            (بر اساس تنظیمات متمرکز هوش مصنوعی سیستم)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {(adDetectionMethod === 'keywords' || adDetectionMethod === 'both') && (
                       <div className="space-y-2 bg-black/30 p-3 rounded-xl border border-white/5">
                         <label className="block text-[11px] font-bold text-slate-300">
@@ -1814,7 +1905,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   <textarea
                     value={signature}
                     onChange={(e) => setSignature(e.target.value)}
-                    placeholder={`مثال:\n🆔 ${connection.targetChannel}`}
+                    placeholder={`مثال:\n🆔 ${connection?.targetChannel || '@my_channel'}`}
                     rows={3}
                     className="w-full bg-transparent p-2 text-xs text-white placeholder-slate-500 focus:outline-none resize-none font-sans"
                   />
@@ -1963,6 +2054,70 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             </>
           )}
 
+          {/* Section 10: Telegram Proxy Configuration */}
+          <div className="space-y-3 pt-3 border-t border-white/5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={enableProxy}
+                  onChange={(e) => setEnableProxy(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-500 focus:ring-blue-400 bg-slate-900 border-white/20 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-blue-400" />
+                  <span>تنظیمات پروکسی تلگرام (MTProto / SOCKS5)</span>
+                </span>
+              </label>
+              <span className="text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                جهت عبور از فیلترینگ تلگرام
+              </span>
+            </div>
+
+            {enableProxy && (
+              <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-500/30 space-y-3 animate-fadeIn">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-slate-300">نوع پروکسی:</span>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="proxyType"
+                      value="mtproto"
+                      checked={proxyType === 'mtproto'}
+                      onChange={() => setProxyType('mtproto')}
+                      className="accent-blue-500"
+                    />
+                    <span>MTProto</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="proxyType"
+                      value="socks5"
+                      checked={proxyType === 'socks5'}
+                      onChange={() => setProxyType('socks5')}
+                      className="accent-blue-500"
+                    />
+                    <span>SOCKS5</span>
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-300">
+                    آدرس پروکسی (Proxy URL / Connection String):
+                  </label>
+                  <input
+                    type="text"
+                    value={proxyUrl}
+                    onChange={(e) => setProxyUrl(e.target.value)}
+                    placeholder={proxyType === 'mtproto' ? "tg://proxy?server=...&port=...&secret=..." : "socks5://user:pass@host:port"}
+                    className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
 
 
 
@@ -2002,7 +2157,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <span className="text-[11px] text-slate-400 mb-1 block">متن نمونه کانال مبدأ ({connection.sourceChannel}):</span>
+                <span className="text-[11px] text-slate-400 mb-1 block">متن نمونه کانال مبدأ ({connection?.sourceChannel || 'مبدأ'}):</span>
                 <textarea
                   value={sampleText}
                   onChange={(e) => setSampleText(e.target.value)}
@@ -2014,7 +2169,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
               <div>
                 <span className="text-[11px] text-emerald-400 font-bold mb-1 flex items-center gap-1.5 block">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
-                  <span>خروجی ارسال شونده به ({connection.targetChannel}):</span>
+                  <span>خروجی ارسال شونده به ({connection?.targetChannel || 'مقصد'}):</span>
                 </span>
                 <div className="w-full min-h-[96px] p-3 text-xs rounded-xl whitespace-pre-wrap font-sans transition-all duration-200 preview-output-box">
                   {getTransformedPreview() || <span className="placeholder-text italic">پیش‌نمایش نشان داده خواهد شد...</span>}

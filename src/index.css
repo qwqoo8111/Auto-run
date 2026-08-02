@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://cdn.jsdelivr.net/gh/amir-s/font-yekan-bakh@main/yekan-bakh.css');
 @import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css');
 
 @layer base {
@@ -15,12 +16,99 @@
   body {
     background-color: var(--bg-dark);
     color: #F8FAFC;
-    font-family: 'Anjoman', 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Yekan Bakh', 'Yekan', 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     direction: rtl;
     min-height: 100vh;
     overflow-x: hidden;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
+}
+
+/* Emerald Cyber Green Theme */
+html.theme-emerald {
+  --bg-dark: #061C14;
+  --card-bg: #0B291E;
+  --shadow-dark: #020F0A;
+  --shadow-light: #134232;
+  --accent-telegram: #10B981;
+  --accent-telegram-hover: #34D399;
+  --border-dark: #164E3D;
+  color-scheme: dark;
+}
+
+html.theme-emerald body,
+html.theme-emerald div.min-h-screen {
+  background-color: #061C14 !important;
+  color: #ECFDF5 !important;
+}
+
+html.theme-emerald .neu-flat,
+html.theme-emerald .neu-flat-interactive {
+  background: #0B291E !important;
+  border-color: #164E3D !important;
+}
+
+html.theme-emerald .neu-inset {
+  background: #04140E !important;
+  border-color: #164E3D !important;
+}
+
+/* Deep Ocean Blue Theme */
+html.theme-ocean {
+  --bg-dark: #0A1128;
+  --card-bg: #1C2541;
+  --shadow-dark: #050814;
+  --shadow-light: #2A365C;
+  --accent-telegram: #00B4D8;
+  --accent-telegram-hover: #90E0EF;
+  --border-dark: #2A385B;
+  color-scheme: dark;
+}
+
+html.theme-ocean body,
+html.theme-ocean div.min-h-screen {
+  background-color: #0A1128 !important;
+  color: #F0F8FF !important;
+}
+
+html.theme-ocean .neu-flat,
+html.theme-ocean .neu-flat-interactive {
+  background: #1C2541 !important;
+  border-color: #2A385B !important;
+}
+
+html.theme-ocean .neu-inset {
+  background: #060B1E !important;
+  border-color: #2A385B !important;
+}
+
+/* Luxury Ruby Crimson Theme */
+html.theme-ruby {
+  --bg-dark: #1A0910;
+  --card-bg: #2B111D;
+  --shadow-dark: #0D0408;
+  --shadow-light: #421B2C;
+  --accent-telegram: #E11D48;
+  --accent-telegram-hover: #FB7185;
+  --border-dark: #4C1D32;
+  color-scheme: dark;
+}
+
+html.theme-ruby body,
+html.theme-ruby div.min-h-screen {
+  background-color: #1A0910 !important;
+  color: #FFF1F2 !important;
+}
+
+html.theme-ruby .neu-flat,
+html.theme-ruby .neu-flat-interactive {
+  background: #2B111D !important;
+  border-color: #4C1D32 !important;
+}
+
+html.theme-ruby .neu-inset {
+  background: #10050A !important;
+  border-color: #4C1D32 !important;
 }
 
 /* Light Theme Overrides - Clean SaaS Layout */

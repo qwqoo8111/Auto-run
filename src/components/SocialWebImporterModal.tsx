@@ -99,6 +99,48 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
   // Status & Feedback
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [postingIndex, setPostingIndex] = useState<number | null>(null);
+  const [showOverrideAi, setShowOverrideAi] = useState<boolean>(false);
+
+  // Sync with Centralized AI Settings from localStorage or connections
+  const syncWithCentralizedAiSettings = () => {
+    try {
+      const cached = localStorage.getItem('centralized_ai_settings');
+      let centralData: any = null;
+      if (cached) {
+        try { centralData = JSON.parse(cached); } catch (e) {}
+      }
+      if (!centralData && connections && connections.length > 0) {
+        const s = connections[0]?.settings;
+        if (s) {
+          centralData = {
+            aiProvider: s.aiProvider || 'gemini',
+            aiApiKey: s.aiApiKey || s.geminiApiKey || '',
+            aiModel: s.aiModel || 'gemini-3.6-flash',
+            aiCustomBaseUrl: s.aiCustomBaseUrl || 'https://openrouter.ai/api/v1',
+          };
+        }
+      }
+
+      if (centralData) {
+        if (centralData.aiProvider) setUserAiProvider(centralData.aiProvider);
+        if (centralData.aiApiKey) {
+          setUserAiApiKey(centralData.aiApiKey);
+          localStorage.setItem('autorun_user_ai_api_key', centralData.aiApiKey);
+        }
+        if (centralData.aiModel) {
+          setUserAiModel(centralData.aiModel);
+          localStorage.setItem('autorun_user_ai_model', centralData.aiModel);
+        }
+        if (centralData.aiCustomBaseUrl) {
+          setUserAiCustomBaseUrl(centralData.aiCustomBaseUrl);
+          localStorage.setItem('autorun_user_ai_custom_base_url', centralData.aiCustomBaseUrl);
+        }
+        setStatusMessage({ type: 'success', text: 'تنظیمات متمرکز هوش مصنوعی با موفقیت فراخوانی و فعال گردید.' });
+      }
+    } catch (e) {
+      console.warn("Failed to sync centralized AI:", e);
+    }
+  };
 
   // Fetch Auto Trend Config on load
   useEffect(() => {
@@ -135,8 +177,14 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
           localStorage.setItem('autorun_user_ai_model', res.config.model);
         }
       }
+
+      // If no API key loaded yet, sync with Centralized AI
+      if (!res.config?.apiKey && !userAiApiKey) {
+        syncWithCentralizedAiSettings();
+      }
     } catch (err) {
       console.warn("Failed to load auto trend config:", err);
+      syncWithCentralizedAiSettings();
     } finally {
       setIsLoadingAuto(false);
     }
@@ -1043,174 +1091,226 @@ export const SocialWebImporterModal: React.FC<SocialWebImporterModalProps> = ({
             <div className="p-4 neu-inset rounded-2xl border border-purple-500/30 bg-purple-950/30 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-xs font-black text-purple-200 flex items-center gap-1.5">
-                  <Key className="w-4 h-4 text-purple-400" />
-                  <span>تنظیم سرویس و کلید API اختصاصی هوش مصنوعی (جهت کاوش و بروزرسانی ترندهای X):</span>
-                  <span className="text-rose-400 font-bold">* (الزامی)</span>
+                  <Globe className="w-4 h-4 text-purple-400" />
+                  <span>تنظیمات هوش مصنوعی (جهت کاوش و بروزرسانی ترندهای X):</span>
                 </label>
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-amber-300 hover:text-amber-200 underline font-bold"
-                >
-                  دریافت کلید رایگان Gemini از Google AI Studio ➔
-                </a>
-              </div>
-
-              {/* Provider & API Key */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="md:col-span-3">
-                  <input
-                    type="password"
-                    value={userAiApiKey}
-                    onChange={(e) => {
-                      setUserAiApiKey(e.target.value);
-                      localStorage.setItem('autorun_user_ai_api_key', e.target.value.trim());
-                    }}
-                    placeholder="کلید API اختصاصی خود را وارد کنید..."
-                    className="w-full p-2.5 text-xs font-mono bg-slate-900 border border-purple-500/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 dir-ltr text-right"
-                  />
-                </div>
-                <div className="md:col-span-1">
-                  <select
-                    value={userAiProvider}
-                    onChange={(e) => setUserAiProvider(e.target.value)}
-                    className="w-full p-2.5 text-xs font-bold bg-slate-900 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={syncWithCentralizedAiSettings}
+                    className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] shadow transition-all cursor-pointer flex items-center gap-1"
                   >
-                    <option value="custom_openai">سرویس سفارشی / API هر سایت (Custom API)</option>
-                    <option value="openrouter">OpenRouter (اوپن‌روتر)</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="openai">OpenAI (ChatGPT)</option>
-                    <option value="deepseek">DeepSeek AI</option>
-                    <option value="claude">Anthropic Claude</option>
-                  </select>
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>همگام‌سازی با AI اصلی سیستم</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverrideAi(!showOverrideAi)}
+                    className="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-slate-300 font-bold text-[11px] border border-white/10 transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>{showOverrideAi ? 'بستن تنظیمات دستی' : 'تغییر دستی کلید API'}</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Custom Base URL (لینک دلخواه سایت API) */}
-              <div className="space-y-2 p-3 rounded-xl bg-slate-900/80 border border-blue-500/30">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <label className="text-xs font-bold text-blue-200 flex items-center gap-1.5">
-                    <Globe className="w-4 h-4 text-blue-400" />
-                    <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
-                  </label>
-                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
-                    قابلیت اتصال API به هر سایت
+              {/* Centralized AI Active Status Banner */}
+              <div className="p-3 rounded-xl bg-purple-900/40 border border-purple-500/30 text-xs flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span className="text-slate-200 font-bold">وضعیت هوش مصنوعی فعال:</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">
+                    {userAiProvider} | {userAiModel || 'پیش‌فرض'}
                   </span>
+                  {userAiApiKey ? (
+                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      <span>کلید API متصل است</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                      کلید API ثبت نشده است
+                    </span>
+                  )}
                 </div>
-                <input
-                  type="text"
-                  value={userAiCustomBaseUrl}
-                  onChange={(e) => {
-                    setUserAiCustomBaseUrl(e.target.value);
-                    localStorage.setItem('autorun_user_ai_custom_base_url', e.target.value.trim());
-                  }}
-                  placeholder="https://api.your-custom-site.com/v1 یا http://localhost:11434/v1"
-                  className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 dir-ltr text-left"
-                />
-                <div className="flex gap-1.5 flex-wrap pt-0.5">
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای سریع:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserAiProvider('custom_openai');
-                      setUserAiCustomBaseUrl('https://api.groq.com/openai/v1');
-                      setUserAiModel('llama-3.3-70b-versatile');
-                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.groq.com/openai/v1');
-                      localStorage.setItem('autorun_user_ai_model', 'llama-3.3-70b-versatile');
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                  >
-                    ⚡ Groq API
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserAiProvider('openrouter');
-                      setUserAiCustomBaseUrl('https://openrouter.ai/api/v1');
-                      setUserAiModel('openrouter/auto');
-                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://openrouter.ai/api/v1');
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                  >
-                    🌐 OpenRouter
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserAiProvider('custom_openai');
-                      setUserAiCustomBaseUrl('https://api.together.xyz/v1');
-                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.together.xyz/v1');
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                  >
-                    🚀 Together AI
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserAiProvider('custom_openai');
-                      setUserAiCustomBaseUrl('http://localhost:11434/v1');
-                      localStorage.setItem('autorun_user_ai_custom_base_url', 'http://localhost:11434/v1');
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                  >
-                    💻 Ollama (محلی)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserAiProvider('deepseek');
-                      setUserAiCustomBaseUrl('https://api.deepseek.com');
-                      setUserAiModel('deepseek-chat');
-                      localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.deepseek.com');
-                      localStorage.setItem('autorun_user_ai_model', 'deepseek-chat');
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
-                  >
-                    🐳 DeepSeek
-                  </button>
-                </div>
+                <span className="text-[10px] text-slate-400">
+                  (استفاده یکپارچه از مرکز تنظیمات هوش مصنوعی)
+                </span>
               </div>
 
-              {/* Model Name & Test Button Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                    🤖 نام مدل اختصاصی هوش مصنوعی (اختیاری / تایپ دستی):
-                  </label>
-                  <input
-                    type="text"
-                    value={userAiModel}
-                    onChange={(e) => {
-                      setUserAiModel(e.target.value);
-                      localStorage.setItem('autorun_user_ai_model', e.target.value.trim());
-                    }}
-                    placeholder="مثال: llama-3.3-70b-versatile یا deepseek-chat یا gpt-4o"
-                    className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-purple-400 dir-ltr text-left"
-                  />
+              {/* Manual AI Override Form (Shown if toggled or if user explicitly wants) */}
+              {showOverrideAi && (
+                <div className="space-y-4 pt-2 border-t border-purple-500/20">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-bold text-slate-300">
+                      پیکربندی کلید API و ارائه دهنده اختصاصی (اختیاری):
+                    </span>
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-amber-300 hover:text-amber-200 underline font-bold"
+                    >
+                      دریافت کلید رایگان Gemini از Google AI Studio ➔
+                    </a>
+                  </div>
+
+                  {/* Provider & API Key */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="md:col-span-3">
+                      <input
+                        type="password"
+                        value={userAiApiKey}
+                        onChange={(e) => {
+                          setUserAiApiKey(e.target.value);
+                          localStorage.setItem('autorun_user_ai_api_key', e.target.value.trim());
+                        }}
+                        placeholder="کلید API اختصاصی خود را وارد کنید..."
+                        className="w-full p-2.5 text-xs font-mono bg-slate-900 border border-purple-500/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 dir-ltr text-right"
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <select
+                        value={userAiProvider}
+                        onChange={(e) => setUserAiProvider(e.target.value)}
+                        className="w-full p-2.5 text-xs font-bold bg-slate-900 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
+                      >
+                        <option value="custom_openai">سرویس سفارشی / API هر سایت (Custom API)</option>
+                        <option value="openrouter">OpenRouter (اوپن‌روتر)</option>
+                        <option value="gemini">Google Gemini</option>
+                        <option value="openai">OpenAI (ChatGPT)</option>
+                        <option value="deepseek">DeepSeek AI</option>
+                        <option value="claude">Anthropic Claude</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Custom Base URL (لینک دلخواه سایت API) */}
+                  <div className="space-y-2 p-3 rounded-xl bg-slate-900/80 border border-blue-500/30">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="text-xs font-bold text-blue-200 flex items-center gap-1.5">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                        <span>🌐 آدرس API اختصاصی / Base URL هر سایت یا سرور دلخواه:</span>
+                      </label>
+                      <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold border border-blue-500/30">
+                        قابلیت اتصال API به هر سایت
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={userAiCustomBaseUrl}
+                      onChange={(e) => {
+                        setUserAiCustomBaseUrl(e.target.value);
+                        localStorage.setItem('autorun_user_ai_custom_base_url', e.target.value.trim());
+                      }}
+                      placeholder="https://api.your-custom-site.com/v1 یا http://localhost:11434/v1"
+                      className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 dir-ltr text-left"
+                    />
+                    <div className="flex gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای سریع:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAiProvider('custom_openai');
+                          setUserAiCustomBaseUrl('https://api.groq.com/openai/v1');
+                          setUserAiModel('llama-3.3-70b-versatile');
+                          localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.groq.com/openai/v1');
+                          localStorage.setItem('autorun_user_ai_model', 'llama-3.3-70b-versatile');
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                      >
+                        ⚡ Groq API
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAiProvider('openrouter');
+                          setUserAiCustomBaseUrl('https://openrouter.ai/api/v1');
+                          setUserAiModel('openrouter/auto');
+                          localStorage.setItem('autorun_user_ai_custom_base_url', 'https://openrouter.ai/api/v1');
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                      >
+                        🌐 OpenRouter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAiProvider('custom_openai');
+                          setUserAiCustomBaseUrl('https://api.together.xyz/v1');
+                          localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.together.xyz/v1');
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                      >
+                        🚀 Together AI
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAiProvider('custom_openai');
+                          setUserAiCustomBaseUrl('http://localhost:11434/v1');
+                          localStorage.setItem('autorun_user_ai_custom_base_url', 'http://localhost:11434/v1');
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                      >
+                        💻 Ollama (محلی)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAiProvider('deepseek');
+                          setUserAiCustomBaseUrl('https://api.deepseek.com');
+                          setUserAiModel('deepseek-chat');
+                          localStorage.setItem('autorun_user_ai_custom_base_url', 'https://api.deepseek.com');
+                          localStorage.setItem('autorun_user_ai_model', 'deepseek-chat');
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 border border-blue-500/30 transition-all cursor-pointer font-medium"
+                      >
+                        🐳 DeepSeek
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Model Name & Test Button Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        🤖 نام مدل اختصاصی هوش مصنوعی (اختیاری / تایپ دستی):
+                      </label>
+                      <input
+                        type="text"
+                        value={userAiModel}
+                        onChange={(e) => {
+                          setUserAiModel(e.target.value);
+                          localStorage.setItem('autorun_user_ai_model', e.target.value.trim());
+                        }}
+                        placeholder="مثال: llama-3.3-70b-versatile یا deepseek-chat یا gpt-4o"
+                        className="w-full p-2 text-xs font-mono bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:border-purple-400 dir-ltr text-left"
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-end">
+                      <button
+                        type="button"
+                        onClick={handleTestAiInModal}
+                        disabled={isTestingAi}
+                        className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow"
+                      >
+                        {isTestingAi ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>در حال تست...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5 text-amber-300" />
+                            <span>⚡ تست اتصال به API</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="md:col-span-1 flex items-end">
-                  <button
-                    type="button"
-                    onClick={handleTestAiInModal}
-                    disabled={isTestingAi}
-                    className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow"
-                  >
-                    {isTestingAi ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>در حال تست...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3.5 h-3.5 text-amber-300" />
-                        <span>⚡ تست اتصال به API</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+              )}
 
               {/* Live Test Feedback Display */}
               {aiTestResult && (

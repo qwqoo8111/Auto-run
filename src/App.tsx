@@ -11,6 +11,7 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { SubscriptionsModal } from './components/SubscriptionsModal';
 import { GlobalSupervisorModal } from './components/GlobalSupervisorModal';
 import { SocialWebImporterModal } from './components/SocialWebImporterModal';
+import { ThemeSelectorModal, AppTheme } from './components/ThemeSelectorModal';
 import { TelegramConnection, CreateConnectionDTO, ConnectionStats, User } from './types';
 
 import { 
@@ -26,9 +27,10 @@ import {
 import { SlidersHorizontal, Radio, Layers, Sun, Moon } from 'lucide-react';
 
 export default function App() {
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('autorun_theme') as 'dark' | 'light') || 'dark';
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    return (localStorage.getItem('autorun_theme') as AppTheme) || 'dark';
   });
+  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
 
   const [connections, setConnections] = useState<TelegramConnection[]>([]);
   const [stats, setStats] = useState<ConnectionStats>({
@@ -45,6 +47,7 @@ export default function App() {
   const [isSubscriptionsOpen, setIsSubscriptionsOpen] = useState(false);
   const [isGlobalSupervisorOpen, setIsGlobalSupervisorOpen] = useState(false);
   const [isSocialWebImporterOpen, setIsSocialWebImporterOpen] = useState(false);
+  const [isGlobalAiSettingsOpen, setIsGlobalAiSettingsOpen] = useState(false);
 
   const authToken = localStorage.getItem('autorun_auth_token') || '';
 
@@ -56,16 +59,17 @@ export default function App() {
 
   // Sync theme class to html element
   useEffect(() => {
+    document.documentElement.classList.remove('light', 'theme-dark', 'theme-emerald', 'theme-ocean', 'theme-ruby');
     if (theme === 'light') {
       document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
+    } else if (theme !== 'dark') {
+      document.documentElement.classList.add(`theme-${theme}`);
     }
     localStorage.setItem('autorun_theme', theme);
   }, [theme]);
 
   const handleToggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   // Load User Session & Connections
@@ -275,6 +279,8 @@ export default function App() {
         onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
         onOpenGlobalSupervisor={() => setIsGlobalSupervisorOpen(true)}
         onOpenSocialWebImporter={() => setIsSocialWebImporterOpen(true)}
+        onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
+        onOpenThemeSelector={() => setIsThemeSelectorOpen(true)}
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
@@ -285,6 +291,7 @@ export default function App() {
         isLoading={isFormSubmitting} 
         currentUser={currentUser}
         onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
+        onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
       />
 
 
@@ -367,8 +374,13 @@ export default function App() {
 
       <AdvancedSettingsModal
         connection={selectedSettingsConn}
-        onClose={() => setSelectedSettingsConn(null)}
+        isOpen={isGlobalAiSettingsOpen || !!selectedSettingsConn}
+        onClose={() => {
+          setSelectedSettingsConn(null);
+          setIsGlobalAiSettingsOpen(false);
+        }}
         onSaved={loadData}
+        allConnections={connections}
         currentUser={currentUser}
         onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
       />
@@ -407,6 +419,16 @@ export default function App() {
         onClose={() => setIsSocialWebImporterOpen(false)}
         connections={connections}
         onCreateConnection={handleCreateConnection}
+      />
+
+      <ThemeSelectorModal
+        isOpen={isThemeSelectorOpen}
+        onClose={() => setIsThemeSelectorOpen(false)}
+        currentTheme={theme}
+        onSelectTheme={(newTheme) => {
+          setTheme(newTheme);
+          setIsThemeSelectorOpen(false);
+        }}
       />
 
     </div>
