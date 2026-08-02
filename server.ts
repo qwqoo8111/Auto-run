@@ -26,6 +26,7 @@ const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const PURCHASE_REQUESTS_FILE = path.join(DATA_DIR, "purchase_requests.json");
 const GLOBAL_SUPERVISOR_FILE = path.join(DATA_DIR, "global_supervisor.json");
+const BROADCASTS_FILE = path.join(DATA_DIR, "broadcasts.json");
 
 // Helper storage functions
 function readJsonFile<T>(filePath: string, defaultValue: T): T {
@@ -50,6 +51,30 @@ function writeJsonFile<T>(filePath: string, data: T): void {
 
 let users: User[] = readJsonFile(USERS_FILE, []);
 let purchaseRequests: any[] = readJsonFile(PURCHASE_REQUESTS_FILE, []);
+let broadcasts: any[] = readJsonFile(BROADCASTS_FILE, [
+  {
+    id: 'broadcast_init_1',
+    type: 'admin',
+    title: 'پیام مدیریت سیستم',
+    message: 'نسخه جدید سامانه AUTO RUN فعال شد. الگوریتم‌های هوش مصنوعی و مانیتورینگ خودکار به‌روزرسانی شدند.',
+    targetAudience: 'all',
+    senderName: 'مدیریت ارشد سیستم',
+    senderRole: 'مدیر کل',
+    createdAt: new Date().toISOString(),
+    isImportant: true,
+  },
+  {
+    id: 'broadcast_init_2',
+    type: 'info',
+    title: 'اطلاعیه عملکرد ربات',
+    message: 'سرعت انتقال پیام‌ها و پشتیبانی از مدیاهای حجیم تا ۵۰٪ بهبود یافته است.',
+    targetAudience: 'all',
+    senderName: 'پشتیبانی تکنیکال',
+    senderRole: 'مدیر فنی',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    isImportant: false,
+  }
+]);
 let globalSupervisorConfig = readJsonFile(GLOBAL_SUPERVISOR_FILE, {
   enabled: true,
   botToken: "",
@@ -75,6 +100,16 @@ if (!adminUser) {
     phone: "09120000000",
     password: "137819",
     role: "admin",
+    managerLevel: "super_admin",
+    adminTitle: "مدیر ارشد و مالک سیستم",
+    adminPermissions: {
+      canManageUsers: true,
+      canManageManagers: true,
+      canSendBroadcasts: true,
+      canManagePurchases: true,
+      canManageBackups: true,
+      canManageBots: true,
+    },
     plan: "vip",
     subscriptionStatus: "active",
     subscriptionExpireAt: null,
@@ -91,6 +126,16 @@ if (!adminUser) {
   adminUser.email = "amir.r.an37@gmail.com";
   adminUser.password = "137819";
   adminUser.role = "admin";
+  adminUser.managerLevel = "super_admin";
+  adminUser.adminTitle = "مدیر ارشد و مالک سیستم";
+  adminUser.adminPermissions = {
+    canManageUsers: true,
+    canManageManagers: true,
+    canSendBroadcasts: true,
+    canManagePurchases: true,
+    canManageBackups: true,
+    canManageBots: true,
+  };
   adminUser.plan = "vip";
   adminUser.subscriptionStatus = "active";
   adminUser.subscriptionExpireAt = null;
@@ -4844,6 +4889,16 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
         email: u.email || "",
         phone: u.phone || "",
         role: u.role || "user",
+        managerLevel: u.managerLevel || (u.role === 'admin' ? 'super_admin' : 'custom'),
+        adminPermissions: u.adminPermissions || {
+          canManageUsers: true,
+          canManageManagers: u.role === 'admin',
+          canSendBroadcasts: true,
+          canManagePurchases: true,
+          canManageBackups: true,
+          canManageBots: true,
+        },
+        adminTitle: u.adminTitle || (u.role === 'admin' ? 'مدیر سیستم' : 'کاربر عادی'),
         plan: u.plan || "free",
         subscriptionStatus: subStatus,
         subscriptionExpireAt: expireAt,
@@ -5453,6 +5508,126 @@ app.post("/api/admin/backup/import", (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: "خطا در بازیابی بکاپ: " + (err.message || "") });
+  }
+});
+
+// Admin API: Update Manager Permissions & Role
+app.put("/api/admin/users/:userId/permissions", requireAdmin, (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { role, managerLevel, adminTitle, adminPermissions } = req.body;
+
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "کاربر مورد نظر یافت نشد." });
+    }
+
+    if (targetUser.email.toLowerCase() === ADMIN_EMAIL && role === "user") {
+      return res.status(403).json({ error: "امکان سلب دسترسی مدیریت از مالک اصلی سیستم وجود ندارد." });
+    }
+
+    targetUser.role = role === "admin" ? "admin" : "user";
+    if (managerLevel) targetUser.managerLevel = managerLevel;
+    if (adminTitle) targetUser.adminTitle = adminTitle;
+    if (adminPermissions) targetUser.adminPermissions = adminPermissions;
+
+    writeJsonFile(USERS_FILE, users);
+
+    res.json({
+      success: true,
+      message: `سطح دسترسی و نقش مدیریت ${targetUser.fullName || targetUser.username} با موفقیت به‌روزرسانی شد.`,
+      user: targetUser
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "خطا در ویرایش سطح دسترسی مدیر." });
+  }
+});
+
+// Admin API: Fetch Broadcast Messages
+app.get("/api/admin/broadcasts", requireAdmin, (req, res) => {
+  try {
+    res.json(broadcasts);
+  } catch (err: any) {
+    res.status(500).json({ error: "خطا در دریافت لیست پیام‌های ارسالی." });
+  }
+});
+
+// Admin API: Send Broadcast / Warning / Error to Users
+app.post("/api/admin/broadcasts", requireAdmin, (req, res) => {
+  try {
+    const authUser = (req as any).authUser;
+    const { type, title, message, targetAudience, targetUsername, isImportant } = req.body;
+
+    if (!title || !title.trim() || !message || !message.trim()) {
+      return res.status(400).json({ error: "عنوان و متن پیام الزامی است." });
+    }
+
+    const newBroadcast = {
+      id: `broad_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      type: type || 'admin',
+      title: title.trim(),
+      message: message.trim(),
+      targetAudience: targetAudience || 'all',
+      targetUsername: targetUsername?.trim() || '',
+      senderName: authUser.fullName || authUser.username || 'مدیریت',
+      senderRole: authUser.adminTitle || 'مدیر سیستم',
+      createdAt: new Date().toISOString(),
+      isImportant: !!isImportant
+    };
+
+    broadcasts.unshift(newBroadcast);
+    writeJsonFile(BROADCASTS_FILE, broadcasts);
+
+    res.status(201).json({
+      success: true,
+      message: 'پیام مدیریت و اخطار با موفقیت ثبت شد و به بخش نوتیفیکیشن کاربران ارسال گردید.',
+      broadcast: newBroadcast
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "خطا در ارسال پیام عمومی به کاربران." });
+  }
+});
+
+// Admin API: Delete Broadcast
+app.delete("/api/admin/broadcasts/:id", requireAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    const index = broadcasts.findIndex((b) => b.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "پیام مورد نظر یافت نشد." });
+    }
+
+    broadcasts.splice(index, 1);
+    writeJsonFile(BROADCASTS_FILE, broadcasts);
+
+    res.json({ success: true, message: "پیام با موفقیت حذف شد." });
+  } catch (err: any) {
+    res.status(500).json({ error: "خطا در حذف پیام مدیریت." });
+  }
+});
+
+// User API: Fetch Notifications (Broadcasts & System Warnings)
+app.get("/api/user/notifications", (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    const userRole = authUser?.role || 'user';
+    const userPlan = authUser?.plan || 'free';
+    const userUsername = authUser?.username?.toLowerCase() || '';
+    const userId = authUser?.id || '';
+
+    // Filter broadcasts relevant to this user
+    const userBroadcasts = broadcasts.filter((b) => {
+      if (b.targetAudience === 'all') return true;
+      if (b.targetAudience === userPlan) return true;
+      if (b.targetAudience === 'user' && b.targetUsername) {
+        return b.targetUsername.toLowerCase() === userUsername || b.targetUsername === userId;
+      }
+      return true;
+    });
+
+    res.json(userBroadcasts);
+  } catch (err: any) {
+    res.status(500).json({ error: "خطا در دریافت اعلانات کاربر." });
   }
 });
 

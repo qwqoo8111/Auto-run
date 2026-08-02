@@ -164,6 +164,17 @@ export interface ConnectionStats {
   lastActivity: string | null;
 }
 
+export interface AdminPermissions {
+  canManageUsers?: boolean;
+  canManageManagers?: boolean;
+  canSendBroadcasts?: boolean;
+  canManagePurchases?: boolean;
+  canManageBackups?: boolean;
+  canManageBots?: boolean;
+}
+
+export type ManagerLevel = 'super_admin' | 'technical' | 'support' | 'announcement' | 'custom';
+
 export interface User {
   id: string;
   username: string;
@@ -172,6 +183,9 @@ export interface User {
   phone?: string;
   password?: string;
   role: 'user' | 'admin';
+  managerLevel?: ManagerLevel;
+  adminPermissions?: AdminPermissions;
+  adminTitle?: string;
   plan: 'pro' | 'free' | 'vip';
   subscriptionStatus: 'active' | 'inactive' | 'expired';
   subscriptionExpireAt?: string | null; // ISO date string or null for lifetime
@@ -180,6 +194,19 @@ export interface User {
   createdAt: string;
   updatedAt?: string;
   token?: string;
+}
+
+export interface BroadcastMessage {
+  id: string;
+  type: 'info' | 'warning' | 'error' | 'admin';
+  title: string;
+  message: string;
+  targetAudience: 'all' | 'vip' | 'pro' | 'free' | string;
+  targetUsername?: string;
+  senderName: string;
+  senderRole?: string;
+  createdAt: string;
+  isImportant?: boolean;
 }
 
 export interface LoginDTO {

@@ -3,6 +3,7 @@ import {
   Users, 
   Shield, 
   ShieldAlert, 
+  ShieldCheck,
   CheckCircle2, 
   XCircle, 
   Clock, 
@@ -27,9 +28,17 @@ import {
   Database,
   Receipt,
   FileJson,
-  Check
+  Check,
+  Megaphone,
+  Send,
+  Bell,
+  Volume2,
+  AlertOctagon,
+  Settings,
+  Layers,
+  UserX
 } from 'lucide-react';
-import { User, PurchaseRequestRecord } from '../types';
+import { User, PurchaseRequestRecord, BroadcastMessage, AdminPermissions, ManagerLevel } from '../types';
 import { 
   fetchAdminUsers, 
   updateAdminUserSubscription, 
@@ -39,7 +48,11 @@ import {
   approveAdminPurchaseRequest,
   rejectAdminPurchaseRequest,
   exportAdminBackup,
-  importAdminBackup
+  importAdminBackup,
+  fetchAdminBroadcasts,
+  sendAdminBroadcast,
+  deleteAdminBroadcast,
+  updateManagerPermissions
 } from '../services/api';
 
 interface AdminPanelModalProps {
@@ -55,12 +68,38 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   currentUser,
   authToken
 }) => {
-  const [adminTab, setAdminTab] = useState<'users' | 'requests' | 'backup'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'managers' | 'broadcast' | 'requests' | 'backup'>('users');
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Broadcast & Announcements State
+  const [broadcasts, setBroadcasts] = useState<BroadcastMessage[]>([]);
+  const [loadingBroadcasts, setLoadingBroadcasts] = useState<boolean>(false);
+  const [broadcastType, setBroadcastType] = useState<'info' | 'warning' | 'error' | 'admin'>('admin');
+  const [broadcastTitle, setBroadcastTitle] = useState<string>('');
+  const [broadcastMessage, setBroadcastMessage] = useState<string>('');
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'vip' | 'pro' | 'free' | 'user'>('all');
+  const [broadcastTargetUser, setBroadcastTargetUser] = useState<string>('');
+  const [broadcastImportant, setBroadcastImportant] = useState<boolean>(false);
+  const [sendingBroadcast, setSendingBroadcast] = useState<boolean>(false);
+
+  // Manager & Permissions Modal State
+  const [editingManagerUser, setEditingManagerUser] = useState<User | null>(null);
+  const [managerRole, setManagerRole] = useState<'user' | 'admin'>('admin');
+  const [managerLevel, setManagerLevel] = useState<ManagerLevel>('super_admin');
+  const [adminTitle, setAdminTitle] = useState<string>('مدیر سیستم');
+  const [managerPerms, setManagerPerms] = useState<AdminPermissions>({
+    canManageUsers: true,
+    canManageManagers: true,
+    canSendBroadcasts: true,
+    canManagePurchases: true,
+    canManageBackups: true,
+    canManageBots: true,
+  });
+  const [submittingManagerPerms, setSubmittingManagerPerms] = useState<boolean>(false);
 
   // Purchase Requests State
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequestRecord[]>([]);
@@ -129,12 +168,149 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
+  const loadBroadcasts = async () => {
+    if (!authToken) return;
+    setLoadingBroadcasts(true);
+    try {
+      const data = await fetchAdminBroadcasts(authToken);
+      setBroadcasts(data || []);
+    } catch (err: any) {
+      console.error('Error loading broadcasts:', err);
+    } finally {
+      setLoadingBroadcasts(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && authToken) {
       loadUsers();
       loadPurchaseRequests();
+      loadBroadcasts();
     }
   }, [isOpen, authToken]);
+
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+      setError('عنوان و متن پیام نمی‌تواند خالی باشد.');
+      return;
+    }
+    setSendingBroadcast(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await sendAdminBroadcast(authToken, {
+        type: broadcastType,
+        title: broadcastTitle,
+        message: broadcastMessage,
+        targetAudience: broadcastTarget === 'user' ? (broadcastTargetUser || 'all') : broadcastTarget,
+        targetUsername: broadcastTargetUser,
+        isImportant: broadcastImportant,
+      });
+      setSuccessMsg(res.message || 'پیام با موفقیت به تمام کاربران ارسال شد.');
+      setBroadcastTitle('');
+      setBroadcastMessage('');
+      setBroadcastImportant(false);
+      loadBroadcasts();
+    } catch (err: any) {
+      setError(err.message || 'خطا در ارسال پیام عمومی.');
+    } finally {
+      setSendingBroadcast(false);
+    }
+  };
+
+  const handleDeleteBroadcast = async (id: string) => {
+    try {
+      await deleteAdminBroadcast(authToken, id);
+      setSuccessMsg('پیام ارسال‌شده با موفقیت حذف گردید.');
+      loadBroadcasts();
+    } catch (err: any) {
+      setError(err.message || 'خطا در حذف پیام.');
+    }
+  };
+
+  const handleOpenManagerModal = (user: User) => {
+    setEditingManagerUser(user);
+    setManagerRole(user.role || 'admin');
+    setManagerLevel(user.managerLevel || 'super_admin');
+    setAdminTitle(user.adminTitle || (user.role === 'admin' ? 'مدیر سیستم' : 'اپراتور'));
+    setManagerPerms(user.adminPermissions || {
+      canManageUsers: true,
+      canManageManagers: user.role === 'admin',
+      canSendBroadcasts: true,
+      canManagePurchases: true,
+      canManageBackups: true,
+      canManageBots: true,
+    });
+  };
+
+  const handleLevelPresetChange = (lvl: ManagerLevel) => {
+    setManagerLevel(lvl);
+    if (lvl === 'super_admin') {
+      setAdminTitle('مدیر ارشد سیستم');
+      setManagerPerms({
+        canManageUsers: true,
+        canManageManagers: true,
+        canSendBroadcasts: true,
+        canManagePurchases: true,
+        canManageBackups: true,
+        canManageBots: true,
+      });
+    } else if (lvl === 'technical') {
+      setAdminTitle('مدیر فنی و زیرساخت');
+      setManagerPerms({
+        canManageUsers: true,
+        canManageManagers: false,
+        canSendBroadcasts: true,
+        canManagePurchases: false,
+        canManageBackups: true,
+        canManageBots: true,
+      });
+    } else if (lvl === 'support') {
+      setAdminTitle('مدیر پشتیبانی و مالی');
+      setManagerPerms({
+        canManageUsers: true,
+        canManageManagers: false,
+        canSendBroadcasts: true,
+        canManagePurchases: true,
+        canManageBackups: false,
+        canManageBots: false,
+      });
+    } else if (lvl === 'announcement') {
+      setAdminTitle('مدیر اطلاع‌رسانی');
+      setManagerPerms({
+        canManageUsers: false,
+        canManageManagers: false,
+        canSendBroadcasts: true,
+        canManagePurchases: false,
+        canManageBackups: false,
+        canManageBots: false,
+      });
+    }
+  };
+
+  const handleSaveManagerPermissions = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingManagerUser) return;
+    setSubmittingManagerPerms(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await updateManagerPermissions(authToken, editingManagerUser.id, {
+        role: managerRole,
+        managerLevel,
+        adminTitle,
+        adminPermissions: managerPerms,
+      });
+      setSuccessMsg(res.message || 'سطح دسترسی و نقش مدیر با موفقیت ذخیره شد.');
+      setEditingManagerUser(null);
+      loadUsers();
+    } catch (err: any) {
+      setError(err.message || 'خطا در ثبت سطح دسترسی مدیر.');
+    } finally {
+      setSubmittingManagerPerms(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -422,7 +598,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         <div className="flex items-center gap-2 px-4 sm:px-6 pt-3 bg-slate-950/40 border-b border-slate-800/80 overflow-x-auto">
           <button
             onClick={() => setAdminTab('users')}
-            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               adminTab === 'users'
                 ? 'bg-slate-800 text-amber-300 border-t border-x border-amber-500/30'
                 : 'text-slate-400 hover:text-slate-200'
@@ -436,8 +612,38 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           </button>
 
           <button
+            onClick={() => setAdminTab('managers')}
+            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              adminTab === 'managers'
+                ? 'bg-slate-800 text-indigo-300 border-t border-x border-indigo-500/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" />
+            <span>مدیران و سطوح دسترسی</span>
+            <span className="text-[10px] px-2 py-0.2 rounded-full bg-indigo-950 text-indigo-300 font-mono border border-indigo-500/30">
+              {adminCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setAdminTab('broadcast')}
+            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              adminTab === 'broadcast'
+                ? 'bg-slate-800 text-purple-300 border-t border-x border-purple-500/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Megaphone className="w-4 h-4 text-purple-400" />
+            <span>ارسال پیام و اخطار</span>
+            <span className="text-[10px] px-2 py-0.2 rounded-full bg-purple-950 text-purple-300 font-mono border border-purple-500/30">
+              {broadcasts.length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setAdminTab('requests')}
-            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2.5 rounded-t-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               adminTab === 'requests'
                 ? 'bg-slate-800 text-amber-300 border-t border-x border-amber-500/30'
                 : 'text-slate-400 hover:text-slate-200'
@@ -864,6 +1070,341 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
           )}
 
+          {/* TAB: MANAGERS & PERMISSIONS */}
+          {adminTab === 'managers' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shrink-0 mt-0.5">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">مدیریت مدیران سیستم و تعیین دقیق سطوح دسترسی</h3>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    در این بخش می‌توانید کاربران عادی را به مدیر یا اپراتور ارتقا دهید و سطح دسترسی هر مدیر (شامل مدیریت کاربران، تایید خریدهای مالی، ارسال پیام عمومی و اخطار، بکاپ‌گیری و...) را به تفکیک مشخص کنید.
+                  </p>
+                </div>
+              </div>
+
+              {/* List of Current Managers */}
+              <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-amber-400" />
+                    <span>لیست مدیران و اپراتورهای فعال سیستم ({users.filter(u => u.role === 'admin').length})</span>
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {users.filter(u => u.role === 'admin').map((manager) => {
+                    const perms = manager.adminPermissions || {
+                      canManageUsers: true,
+                      canManageManagers: true,
+                      canSendBroadcasts: true,
+                      canManagePurchases: true,
+                      canManageBackups: true,
+                      canManageBots: true,
+                    };
+                    return (
+                      <div 
+                        key={manager.id} 
+                        className="p-4 rounded-2xl bg-slate-900 border border-indigo-500/30 flex flex-col justify-between space-y-3 shadow-lg"
+                      >
+                        <div className="flex items-start justify-between gap-2 pb-2 border-b border-white/10">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-white">{manager.fullName || manager.username}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">
+                                {manager.adminTitle || 'مدیر سیستم'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 block mt-0.5 dir-ltr text-right">
+                              @{manager.username} • {manager.email}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => handleOpenManagerModal(manager)}
+                            className="p-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            title="ویرایش سطح دسترسی"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>تنظیم دسترسی</span>
+                          </button>
+                        </div>
+
+                        {/* Badges of active permissions */}
+                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                          {perms.canManageUsers && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-emerald-300 border border-emerald-500/30">
+                              ✓ مدیریت کاربران
+                            </span>
+                          )}
+                          {perms.canManageManagers && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-amber-300 border border-amber-500/30">
+                              ✓ مدیریت مدیران
+                            </span>
+                          )}
+                          {perms.canSendBroadcasts && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-purple-300 border border-purple-500/30">
+                              ✓ ارسال پیام/اخطار
+                            </span>
+                          )}
+                          {perms.canManagePurchases && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-sky-300 border border-sky-500/30">
+                              ✓ تایید فیش واریز
+                            </span>
+                          )}
+                          {perms.canManageBackups && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-blue-300 border border-blue-500/30">
+                              ✓ دانلود بکاپ
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section to promote any user to manager */}
+              <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800 space-y-4">
+                <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-emerald-400" />
+                  <span>انتصاب مدیر جدید از بین کاربران ثبت‌نام‌شده</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto p-1">
+                  {users.filter(u => u.role !== 'admin').map(normalUser => (
+                    <div key={normalUser.id} className="p-3 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-200 truncate block">{normalUser.fullName || normalUser.username}</span>
+                        <span className="text-[10px] text-slate-400 block truncate">@{normalUser.username}</span>
+                      </div>
+                      <button
+                        onClick={() => handleOpenManagerModal(normalUser)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] transition-all cursor-pointer shrink-0"
+                      >
+                        ارتقا به مدیر
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: BROADCAST MESSAGES & WARNINGS */}
+          {adminTab === 'broadcast' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 shrink-0 mt-0.5">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">ارسال پیام‌های عمومی، اخطارها و خطاهای مهم به کاربران</h3>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    پیام ثبت‌شده بلافاصله در کادر اعلان‌ها (نوتیفیکیشن) تمام کاربران یا کاربر خاص ظاهر می‌شود و آیکون زنگوله بالای صفحه با نشانگر قرمز متمایز می‌شود.
+                  </p>
+                </div>
+              </div>
+
+              {/* Form & Live Preview Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* Form Area */}
+                <form onSubmit={handleSendBroadcast} className="lg:col-span-7 p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
+                  <h4 className="text-xs font-bold text-purple-300 flex items-center gap-2 pb-2 border-b border-white/10">
+                    <Send className="w-4 h-4 text-purple-400" />
+                    <span>تنظیم فرم ارسال پیام جدید</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Notification Type */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">نوع و ماهیت پیام:</label>
+                      <select
+                        value={broadcastType}
+                        onChange={(e: any) => setBroadcastType(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-purple-500 outline-none"
+                      >
+                        <option value="admin">📢 پیام ویژه مدیریت (Admin)</option>
+                        <option value="info">ℹ️ اطلاعیه معمولی (Info)</option>
+                        <option value="warning">⚠️ اخطار و هشدار (Warning)</option>
+                        <option value="error">🛑 خطای مهم / قطعی (Error)</option>
+                      </select>
+                    </div>
+
+                    {/* Target Audience */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">گیرندگان پیام:</label>
+                      <select
+                        value={broadcastTarget}
+                        onChange={(e: any) => setBroadcastTarget(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-purple-500 outline-none"
+                      >
+                        <option value="all">🌐 همه کاربران سیستم</option>
+                        <option value="vip">💎 فقط کاربران VIP</option>
+                        <option value="pro">🚀 فقط کاربران Pro</option>
+                        <option value="free">🆓 فقط کاربران رایگان (Free)</option>
+                        <option value="user">👤 کاربر خاص (بر اساس یوزرنیم)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Specific user selection input */}
+                  {broadcastTarget === 'user' && (
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">نام کاربری (Username) کاربر مقصد:</label>
+                      <input
+                        type="text"
+                        placeholder="مثلا: user123 یا ایمیل کاربر"
+                        value={broadcastTargetUser}
+                        onChange={(e) => setBroadcastTargetUser(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-purple-500 outline-none dir-ltr"
+                      />
+                    </div>
+                  )}
+
+                  {/* Title */}
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 block mb-1">عنوان پیام / اخطار:</label>
+                    <input
+                      type="text"
+                      placeholder="مثلا: به‌روزرسانی مهم سرورها یا اخطار رعایت قوانین"
+                      value={broadcastTitle}
+                      onChange={(e) => setBroadcastTitle(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-purple-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Message Body */}
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 block mb-1">توضیحات و متن کامل پیام:</label>
+                    <textarea
+                      rows={4}
+                      placeholder="متن پیام خود را به دقت وارد کنید..."
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 focus:border-purple-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Checkbox Important */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="chkImportant"
+                      checked={broadcastImportant}
+                      onChange={(e) => setBroadcastImportant(e.target.checked)}
+                      className="w-4 h-4 rounded accent-red-500 cursor-pointer"
+                    />
+                    <label htmlFor="chkImportant" className="text-xs font-bold text-slate-200 cursor-pointer">
+                      علامت‌گذاری به‌عنوان «پیام فوری و مهم» (نمایش بنر قرمز)
+                    </label>
+                  </div>
+
+                  {/* Submit button */}
+                  <button
+                    type="submit"
+                    disabled={sendingBroadcast}
+                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Send className={`w-4 h-4 ${sendingBroadcast ? 'animate-bounce' : ''}`} />
+                    <span>{sendingBroadcast ? 'در حال ارسال پیام...' : 'انتشار و ارسال پیام به نوتیفیکیشن کاربران'}</span>
+                  </button>
+                </form>
+
+                {/* Live Preview Card */}
+                <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-300 flex items-center gap-2 pb-2 border-b border-white/10 mb-4">
+                      <Volume2 className="w-4 h-4 text-sky-400" />
+                      <span>پیش‌نمایش زنده در کادر نوتیفیکیشن کاربر</span>
+                    </h4>
+
+                    <div className={`p-4 rounded-xl border transition-all space-y-2 ${
+                      broadcastType === 'error'
+                        ? 'bg-red-500/10 border-red-500/30 text-red-200'
+                        : broadcastType === 'warning'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                        : broadcastType === 'admin'
+                        ? 'bg-purple-500/10 border-purple-500/30 text-purple-200'
+                        : 'bg-slate-900 border-white/10 text-slate-200'
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-black text-white">
+                          {broadcastTitle || 'عنوان نمونه پیام'}
+                        </span>
+                        {broadcastImportant && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500 text-white font-bold">
+                            مهم
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {broadcastMessage || 'متن پیام ارسال‌شده در اینجا به کاربر نمایش داده خواهد شد.'}
+                      </p>
+
+                      <div className="pt-2 border-t border-white/5 text-[10px] text-slate-400 flex items-center justify-between">
+                        <span>ارسال‌کننده: {currentUser?.fullName || 'مدیریت کل'}</span>
+                        <span>هم‌اکنون</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 text-[11px] text-slate-400">
+                    💡 <strong>نکته:</strong> به‌محض ارسال، آیکون زنگوله نوتیفیکیشن در بالای صفحه کاربر به رنگ قرمز چشمک خواهد زد.
+                  </div>
+                </div>
+              </div>
+
+              {/* Sent Messages History */}
+              <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
+                <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2 pb-2 border-b border-white/10">
+                  <Clock className="w-4 h-4 text-purple-400" />
+                  <span>تاریخچه پیام‌ها و اخطارهای ارسال‌شده توسط مدیریت</span>
+                </h4>
+
+                {broadcasts.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-6">هنوز هیچ پیامی ارسال نشده است.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {broadcasts.map((b) => (
+                      <div key={b.id} className="p-3.5 rounded-xl bg-slate-900 border border-white/5 flex items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">{b.title}</span>
+                            <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+                              b.type === 'error' ? 'bg-red-500/20 text-red-300' :
+                              b.type === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+                              b.type === 'admin' ? 'bg-purple-500/20 text-purple-300' : 'bg-sky-500/20 text-sky-300'
+                            }`}>
+                              {b.type === 'error' ? 'خطا' : b.type === 'warning' ? 'اخطار' : b.type === 'admin' ? 'مدیریت' : 'اطلاعیه'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">گیرندگان: {b.targetAudience === 'all' ? 'همه' : b.targetAudience}</span>
+                          </div>
+                          <p className="text-xs text-slate-300 break-words">{b.message}</p>
+                          <div className="text-[10px] text-slate-400 pt-1">
+                            ارسال‌شده توسط: {b.senderName} ({b.senderRole || 'مدیر'}) • {new Date(b.createdAt).toLocaleDateString('fa-IR')}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteBroadcast(b.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+                          title="حذف این پیام"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB 3: BACKUP & SERVER MIGRATION */}
           {adminTab === 'backup' && (
             <div className="space-y-6">
@@ -1123,6 +1664,187 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAddUserOpen(false)}
+                    className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    انصراف
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Edit Manager Permissions */}
+        {editingManagerUser && (
+          <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-indigo-500/40 rounded-3xl w-full max-w-lg p-6 space-y-5 animate-fade-in dir-rtl shadow-2xl text-slate-100 admin-modal-subdialog">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                  <div>
+                    <h3 className="text-sm font-bold text-white">تنظیم سطح دسترسی و مسئولیت‌های مدیر</h3>
+                    <p className="text-[11px] text-slate-400">کاربر: {editingManagerUser.fullName || editingManagerUser.username} (@{editingManagerUser.username})</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingManagerUser(null)}
+                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveManagerPermissions} className="space-y-4">
+                
+                {/* Role Toggle */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setManagerRole('admin')}
+                    className={`py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                      managerRole === 'admin' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    👑 مدیر اصلی (Admin)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManagerRole('user')}
+                    className={`py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                      managerRole === 'user' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    👤 کاربر معمولی (User)
+                  </button>
+                </div>
+
+                {managerRole === 'admin' && (
+                  <>
+                    {/* Preset Manager Level */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">الگوی پیشنهادی دسترسی (Level Preset):</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleLevelPresetChange('super_admin')}
+                          className={`p-2.5 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                            managerLevel === 'super_admin' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          🌟 مدیر ارشد سیستم
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleLevelPresetChange('technical')}
+                          className={`p-2.5 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                            managerLevel === 'technical' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          🛠️ مدیر فنی / سرور
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleLevelPresetChange('support')}
+                          className={`p-2.5 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                            managerLevel === 'support' ? 'bg-sky-500/20 border-sky-500/50 text-sky-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          💳 پشتیبانی و مالی
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleLevelPresetChange('announcement')}
+                          className={`p-2.5 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                            managerLevel === 'announcement' ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          📢 مسئول اطلاع‌رسانی
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Custom Title */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">عنوان / سمت مدیریتی:</label>
+                      <input
+                        type="text"
+                        value={adminTitle}
+                        onChange={(e) => setAdminTitle(e.target.value)}
+                        placeholder="مثلا: اپراتور ارشد پشتیبانی"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+
+                    {/* Detailed Permission Checkboxes */}
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <label className="text-[11px] font-bold text-slate-300 block">ریز سطوح مجاز دسترسی:</label>
+                      
+                      <div className="space-y-2 text-xs">
+                        <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950/60 border border-white/5 cursor-pointer hover:bg-slate-950">
+                          <input
+                            type="checkbox"
+                            checked={managerPerms.canManageUsers}
+                            onChange={(e) => setManagerPerms({...managerPerms, canManageUsers: e.target.checked})}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                          />
+                          <span className="text-slate-200">مدیریت کاربران (ویرایش اشتراک، افزودن و حذف کاربر)</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950/60 border border-white/5 cursor-pointer hover:bg-slate-950">
+                          <input
+                            type="checkbox"
+                            checked={managerPerms.canManageManagers}
+                            onChange={(e) => setManagerPerms({...managerPerms, canManageManagers: e.target.checked})}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                          />
+                          <span className="text-slate-200">تعیین مدیران جدید و تغییر سطوح دسترسی دیگران</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950/60 border border-white/5 cursor-pointer hover:bg-slate-950">
+                          <input
+                            type="checkbox"
+                            checked={managerPerms.canSendBroadcasts}
+                            onChange={(e) => setManagerPerms({...managerPerms, canSendBroadcasts: e.target.checked})}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                          />
+                          <span className="text-slate-200">ارسال پیام‌های عمومی، اخطارها و خطاهای همگانی به کاربران</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950/60 border border-white/5 cursor-pointer hover:bg-slate-950">
+                          <input
+                            type="checkbox"
+                            checked={managerPerms.canManagePurchases}
+                            onChange={(e) => setManagerPerms({...managerPerms, canManagePurchases: e.target.checked})}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                          />
+                          <span className="text-slate-200">تایید یا رد فیش‌های پرداخت و درخواست‌های خرید</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950/60 border border-white/5 cursor-pointer hover:bg-slate-950">
+                          <input
+                            type="checkbox"
+                            checked={managerPerms.canManageBackups}
+                            onChange={(e) => setManagerPerms({...managerPerms, canManageBackups: e.target.checked})}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                          />
+                          <span className="text-slate-200">دانلود و استخراج بکاپ دیتابیس کل سرور</span>
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center gap-2 pt-3">
+                  <button
+                    type="submit"
+                    disabled={submittingManagerPerms}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
+                  >
+                    {submittingManagerPerms ? 'در حال ذخیره...' : 'ثبت و ذخیره اختیارات مدیر'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingManagerUser(null)}
                     className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
                   >
                     انصراف

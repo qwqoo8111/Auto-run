@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Loader2, AlertCircle, Bot, CheckCircle2, Crown, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Send, Loader2, AlertCircle, Bot, CheckCircle2, Crown, Sparkles, SlidersHorizontal, Lock, Zap, Link as LinkIcon, AtSign } from 'lucide-react';
 import { CreateConnectionDTO, User } from '../types';
 import { testBaleBot } from '../services/api';
 
@@ -16,7 +16,6 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
   isLoading,
   currentUser,
   onOpenSubscriptions,
-  onOpenAiSettings,
 }) => {
   const isSubscribed = currentUser?.role === 'admin' || (currentUser?.plan !== 'free' && currentUser?.subscriptionStatus === 'active');
 
@@ -106,96 +105,91 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 mb-8">
-      <div className="neu-flat p-6 md:p-8 border border-white/5 relative overflow-hidden rounded-3xl">
+    <div className="w-full mb-6">
+      <div className="neu-flat p-5 md:p-6 border border-white/10 relative overflow-hidden rounded-2xl bg-[#111C2F]/80 backdrop-blur-xl shadow-2xl">
         
-        {/* Subtle Neumorphic Background Accents */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/5 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        {/* Subtle Cyber Neon Accents */}
+        <div className="absolute top-0 left-1/4 w-64 h-32 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        {/* Form Title & Quick AI Settings Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-white/5">
-          <div>
-            <h2 className="text-base font-black text-white flex items-center gap-2">
-              <span>⚡ ساخت اتصال جدید و انتقال خودکار کانال</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              اطلاعات کانال مبدأ، مقصد و توکن ربات خود را وارد کنید
-            </p>
+        {/* Form Title */}
+        <div className="flex items-center justify-between gap-3 mb-5 pb-3 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+              <Zap className="w-5 h-5 fill-sky-400/20" />
+            </div>
+            <div>
+              <h2 className="text-sm md:text-base font-black text-white">
+                ساخت اتصال جدید و انتقال خودکار
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                کانال مبدأ، کانال مقصد و توکن ربات مدیریت خود را ثبت کنید
+              </p>
+            </div>
           </div>
-
-          {onOpenAiSettings && (
-            <button
-              type="button"
-              onClick={onOpenAiSettings}
-              className="px-3.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-200 text-xs font-bold transition-all flex items-center gap-2 shadow cursor-pointer shrink-0"
-              title="تنظیمات هوش مصنوعی، کلید API و بازنویسی متون"
-            >
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>⚙️ تنظیمات هوش مصنوعی</span>
-            </button>
-          )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           
-          {/* Error Banner if any */}
+          {/* Error Banner */}
           {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center gap-3 animate-shake">
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+            <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs flex items-center gap-2.5 animate-shake">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* 3 Main Connection Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* 3 Main Connection Fields matching Image 2 & Image 3 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
             {/* Field 1: Source Channel */}
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-white pr-1">
-                کانال مبدأ (تلگرام) ✈️
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Send className="w-3.5 h-3.5 text-sky-400" />
+                <span>کانال مبدأ (تلگرام)</span>
               </label>
-              <div className="neu-inset p-1 flex items-center">
+              <div className="relative flex items-center bg-[#0B1220] border border-white/10 rounded-xl focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 transition-all">
                 <input
                   type="text"
                   value={sourceChannel}
                   onChange={(e) => setSourceChannel(e.target.value)}
                   placeholder="مثال: channel_source@"
-                  className="w-full bg-transparent px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none text-sm dir-ltr text-right"
+                  className="w-full bg-transparent px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-right"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
             {/* Field 2: Target Channel */}
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-white pr-1">
-                کانال مقصد (تلگرام)
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5 text-purple-400" />
+                <span>کانال مقصد (تلگرام)</span>
               </label>
-              <div className="neu-inset p-1 flex items-center">
+              <div className="relative flex items-center bg-[#0B1220] border border-white/10 rounded-xl focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 transition-all">
                 <input
                   type="text"
                   value={targetChannel}
                   onChange={(e) => setTargetChannel(e.target.value)}
                   placeholder="مثال: channel_target@"
-                  className="w-full bg-transparent px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none text-sm dir-ltr text-right"
+                  className="w-full bg-transparent px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-right"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
             {/* Field 3: Bot Token */}
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-white pr-1">
-                توکن ربات تلگرام
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <AtSign className="w-3.5 h-3.5 text-emerald-400" />
+                <span>توکن ربات تلگرام</span>
               </label>
-              <div className="neu-inset p-1 flex items-center">
+              <div className="relative flex items-center bg-[#0B1220] border border-white/10 rounded-xl focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 transition-all">
                 <input
                   type="text"
                   value={botToken}
                   onChange={(e) => setBotToken(e.target.value)}
-                  placeholder="123456789:ABCdefGHIjklMNO..."
-                  className="w-full bg-transparent px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none text-sm dir-ltr text-left font-mono"
+                  placeholder="123456789:ABCdefGHIjkl..."
+                  className="w-full bg-transparent px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-left font-mono"
                   disabled={isLoading}
                 />
               </div>
@@ -203,10 +197,10 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
 
           </div>
 
-          {/* Optional Dual Forwarding to Bale Section */}
-          <div className="p-5 rounded-2xl neu-inset bg-emerald-500/5 border border-emerald-500/20 space-y-4">
+          {/* Dual Forwarding to Bale Section */}
+          <div className="p-4 rounded-xl bg-[#0B1220]/60 border border-emerald-500/20 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={enableBale}
@@ -218,18 +212,18 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
                     }
                     setEnableBale(e.target.checked);
                   }}
-                  className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-400 bg-slate-900 border-white/20 cursor-pointer"
+                  className="w-4 h-4 rounded text-sky-500 focus:ring-sky-400 bg-slate-900 border-white/20 cursor-pointer"
                 />
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-emerald-300">ارسال همزمان پیام‌ها به پیام‌رسان بله (ایران) 🇮🇷</span>
+                  <span className="text-xs font-bold text-emerald-300">ارسال همزمان پیام‌ها به بله (ایران) 🇮🇷</span>
                   {isSubscribed ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
                       پرو / VIP
                     </span>
                   ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30 flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-amber-400" />
-                      <span>ویژه نسخه اشتراکی</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5 text-amber-400" />
+                      <span>ویژه مشترکین</span>
                     </span>
                   )}
                 </div>
@@ -239,127 +233,88 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
                 <button
                   type="button"
                   onClick={onOpenSubscriptions}
-                  className="px-3 py-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="px-2.5 py-1 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-bold rounded-lg hover:bg-amber-500/30 transition-all flex items-center gap-1 cursor-pointer"
                 >
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  <span>ارتقا به نسخه پرو</span>
+                  <Crown className="w-3 h-3 text-amber-400" />
+                  <span>ارتقا به PRO</span>
                 </button>
               )}
             </div>
 
-            {!isSubscribed && enableBale && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>این قابلیت نیازمند اشتراک <strong>PRO</strong> یا <strong>VIP</strong> می‌باشد.</span>
-                </div>
-                {onOpenSubscriptions && (
-                  <button
-                    type="button"
-                    onClick={onOpenSubscriptions}
-                    className="px-3 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-xs hover:bg-amber-400 transition-all cursor-pointer shrink-0"
-                  >
-                    خرید اشتراک
-                  </button>
-                )}
-              </div>
-            )}
-
             {enableBale && (
-              <div className="space-y-4 pt-2 border-t border-white/10 animate-fadeIn">
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  💡 راهنما: در پیام‌رسان بله ربات‌ساز <strong>BotFather@</strong> را باز کنید و یک ربات جدید بسازید. ربات را مدیر (Admin) کانال بله خود کرده و توکن آن را در زیر وارد کنید:
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-200">
-                      کانال یا گروه مقصد در بله
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleTargetChannel}
-                        onChange={(e) => setBaleTargetChannel(e.target.value)}
-                        placeholder="مثال: my_bale_channel@ یا id_channel"
-                        className="w-full bg-transparent px-3 py-2 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
-                      />
-                    </div>
+              <div className="space-y-3 pt-3 border-t border-white/10 animate-fadeIn">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-300">کانال مقصد بله</label>
+                    <input
+                      type="text"
+                      value={baleTargetChannel}
+                      onChange={(e) => setBaleTargetChannel(e.target.value)}
+                      placeholder="my_bale_channel@"
+                      className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-right"
+                    />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
-                      <span>جایگزین آیدی در بله (اختیاری)</span>
-                      <span className="text-[10px] text-emerald-400 font-normal">در متن پست‌ها</span>
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleReplaceId}
-                        onChange={(e) => setBaleReplaceId(e.target.value)}
-                        placeholder="مثال: my_bale_id@ یا ble.ir/id"
-                        className="w-full bg-transparent px-3 py-2 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-right"
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-300">جایگزین آیدی بله</label>
+                    <input
+                      type="text"
+                      value={baleReplaceId}
+                      onChange={(e) => setBaleReplaceId(e.target.value)}
+                      placeholder="my_bale_id@"
+                      className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-right"
+                    />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-200">
-                      توکن ربات بله
-                    </label>
-                    <div className="neu-inset p-1 flex items-center">
-                      <input
-                        type="text"
-                        value={baleBotToken}
-                        onChange={(e) => setBaleBotToken(e.target.value)}
-                        placeholder="مثال: 123456789:ABCdef..."
-                        className="w-full bg-transparent px-3 py-2 text-white placeholder-slate-500 focus:outline-none text-xs dir-ltr text-left font-mono"
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-300">توکن ربات بله</label>
+                    <input
+                      type="text"
+                      value={baleBotToken}
+                      onChange={(e) => setBaleBotToken(e.target.value)}
+                      placeholder="123456789:ABC..."
+                      className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none dir-ltr text-left font-mono"
+                    />
                   </div>
                 </div>
 
-                {/* Bale Test Button */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                <div className="flex items-center justify-between gap-2 pt-1">
                   <button
                     type="button"
                     onClick={handleTestBale}
                     disabled={testingBale}
-                    className="px-4 py-2 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1.5 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {testingBale ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5 text-emerald-400" />}
-                    <span>ارسال پیام تست به بله</span>
+                    <span>تست ربات بله</span>
                   </button>
 
                   {baleStatusMsg && (
-                    <div className={`text-xs font-bold flex items-center gap-1.5 ${
-                      baleStatusMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'
-                    }`}>
-                      {baleStatusMsg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                      <span>{baleStatusMsg.text}</span>
-                    </div>
+                    <span className={`text-xs font-bold ${baleStatusMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {baleStatusMsg.text}
+                    </span>
                   )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-2 flex justify-center">
+          {/* Submit Button matching Telegram Blue #229ED9 in Image 2 & Image 3 */}
+          <div className="pt-1 flex justify-center">
             <button
               type="submit"
               disabled={isLoading}
-              className="neu-btn-primary w-full md:w-auto px-10 py-3.5 text-base flex items-center justify-center gap-3 font-black cursor-pointer hover:shadow-yellow-400/20 active:scale-95 transition-all"
+              className="w-full py-3 px-8 rounded-xl bg-gradient-to-r from-[#229ED9] to-[#0088CC] hover:from-[#0088CC] hover:to-[#0077B5] text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-sky-500/30 hover:shadow-sky-500/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin text-black" />
-                  <span>در حال ایجاد اتصال...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>در حال راه اندازی اتصال...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-5 h-5 text-black" />
-                  <span>شروع اتصال {enableBale && '(تلگرام + بله)'}</span>
+                  <span>شروع اتصال خودکار</span>
+                  <Send className="w-4 h-4 text-white transform -rotate-12" />
                 </>
               )}
             </button>
@@ -370,3 +325,4 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
     </div>
   );
 };
+

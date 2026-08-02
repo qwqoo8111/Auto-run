@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from './components/Header';
+import { Navigation } from './components/Navigation';
+import { DesktopSidebar } from './components/DesktopSidebar';
 import { CreateConnectionForm } from './components/CreateConnectionForm';
-import { SupportedMediaBar } from './components/SupportedMediaBar';
 import { ConnectionCard } from './components/ConnectionCard';
 import { ConnectionLogsModal } from './components/ConnectionLogsModal';
 import { TransferredMessagesModal } from './components/TransferredMessagesModal';
@@ -11,6 +12,7 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { SubscriptionsModal } from './components/SubscriptionsModal';
 import { GlobalSupervisorModal } from './components/GlobalSupervisorModal';
 import { SocialWebImporterModal } from './components/SocialWebImporterModal';
+import { NotificationsModal } from './components/NotificationsModal';
 import { ThemeSelectorModal, AppTheme } from './components/ThemeSelectorModal';
 import { TelegramConnection, CreateConnectionDTO, ConnectionStats, User } from './types';
 
@@ -31,6 +33,7 @@ export default function App() {
     return (localStorage.getItem('autorun_theme') as AppTheme) || 'dark';
   });
   const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [connections, setConnections] = useState<TelegramConnection[]>([]);
   const [stats, setStats] = useState<ConnectionStats>({
@@ -45,6 +48,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isSubscriptionsOpen, setIsSubscriptionsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isGlobalSupervisorOpen, setIsGlobalSupervisorOpen] = useState(false);
   const [isSocialWebImporterOpen, setIsSocialWebImporterOpen] = useState(false);
   const [isGlobalAiSettingsOpen, setIsGlobalAiSettingsOpen] = useState(false);
@@ -266,12 +270,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-dark)] text-slate-200 selection:bg-yellow-400 selection:text-black py-6 px-3 md:px-6 dir-rtl transition-colors duration-300">
+    <div className="min-h-screen bg-[var(--bg-dark)] text-slate-200 selection:bg-sky-400 selection:text-black py-4 px-2 md:py-6 md:px-6 dir-rtl transition-colors duration-300 pb-6 md:pb-8">
       
-      {/* 1. Header with Stats & User Profile Auth */}
-      <Header 
-        activeCount={stats.activeConnections} 
-        totalTransferred={stats.totalTransferred} 
+      {/* Navigation Drawer & Bottom Bar */}
+      <Navigation
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        activeCount={stats.activeConnections}
+        totalTransferred={stats.totalTransferred}
         currentUser={currentUser}
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
@@ -280,86 +286,122 @@ export default function App() {
         onOpenGlobalSupervisor={() => setIsGlobalSupervisorOpen(true)}
         onOpenSocialWebImporter={() => setIsSocialWebImporterOpen(true)}
         onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
-        onOpenThemeSelector={() => setIsThemeSelectorOpen(true)}
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
 
-      {/* 2. Main 3-Field Connection Form */}
-      <CreateConnectionForm 
-        onSubmit={handleCreateConnection} 
-        isLoading={isFormSubmitting} 
-        currentUser={currentUser}
-        onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
-        onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
-      />
+      <div className="max-w-7xl mx-auto flex gap-6 items-start">
+        
+        {/* Desktop Left/Right Sidebar */}
+        <DesktopSidebar 
+          activeCount={stats.activeConnections}
+          totalTransferred={stats.totalTransferred}
+          currentUser={currentUser}
+          onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+          onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
+          onOpenGlobalSupervisor={() => setIsGlobalSupervisorOpen(true)}
+          onOpenSocialWebImporter={() => setIsSocialWebImporterOpen(true)}
+          onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
+          onToggleTheme={handleToggleTheme}
+          theme={theme}
+        />
 
+        {/* Main Content Column */}
+        <div className="flex-1 min-w-0 w-full">
+          
+          {/* Header */}
+          <Header 
+            activeCount={stats.activeConnections} 
+            totalTransferred={stats.totalTransferred} 
+            currentUser={currentUser}
+            onOpenAuth={handleOpenAuth}
+            onLogout={handleLogout}
+            onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+            onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
+            onOpenNotifications={() => setIsNotificationsOpen(true)}
+            onOpenGlobalSupervisor={() => setIsGlobalSupervisorOpen(true)}
+            onOpenSocialWebImporter={() => setIsSocialWebImporterOpen(true)}
+            onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
+            onOpenThemeSelector={() => setIsThemeSelectorOpen(true)}
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+            onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+          />
 
-      {/* 3. Supported Content Types Bar */}
-      <SupportedMediaBar />
+          {/* Main 3-Field Connection Form */}
+          <CreateConnectionForm 
+            onSubmit={handleCreateConnection} 
+            isLoading={isFormSubmitting} 
+            currentUser={currentUser}
+            onOpenSubscriptions={() => setIsSubscriptionsOpen(true)}
+            onOpenAiSettings={() => setIsGlobalAiSettingsOpen(true)}
+          />
 
-      {/* 4. Connections Management Panel (پنل مدیریت اتصالات) */}
-      <main className="w-full max-w-5xl mx-auto px-4 pb-16">
-        <div className="flex items-center justify-between mb-6 pb-3 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 neu-inset rounded-xl text-yellow-400">
-              <SlidersHorizontal className="w-5 h-5" />
+          {/* Active Connections Panel */}
+          <main className="w-full pb-8">
+            <div className="neu-flat p-4 md:p-5 border border-white/10 rounded-2xl bg-[#111C2F]/80 backdrop-blur-md mb-6 flex items-center justify-between shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm md:text-base font-black text-white">پنل مدیریت اتصالات فعال</h2>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    لیست اتصالات فعال و مدیریت عملیات مانیتورینگ و ویرایش خودکار
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-300 bg-[#0B1220] border border-white/10 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-inner">
+                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline">تعداد اتصالات:</span>
+                <span className="font-bold text-sky-400">{connections.length.toLocaleString('fa-IR')}</span>
+              </div>
             </div>
+
+            {/* List of Connections or Empty State */}
+            {connections.length === 0 ? (
+              <div className="neu-flat p-10 text-center border border-white/10 rounded-2xl bg-[#111C2F]/60 backdrop-blur-md my-6 shadow-xl">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <Layers className="w-8 h-8" />
+                </div>
+                <h3 className="text-sm md:text-base font-bold text-white mb-2">هیچ اتصالی هنوز ثبت نشده است</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  برای شروع، اطلاعات کانال مبدأ، کانال مقصد و توکن ربات تلگرام خود را در فرم بالا وارد کرده و روی «شروع اتصال خودکار» کلیک کنید.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {connections.map((conn) => (
+                  <ConnectionCard
+                    key={conn.id}
+                    connection={conn}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    onDelete={handleDelete}
+                    onOpenLogs={(c) => setSelectedLogsConn(c)}
+                    onOpenMessages={(c) => setSelectedMessagesConn(c)}
+                    onOpenSettings={(c) => setSelectedSettingsConn(c)}
+                    onSendTest={handleSendTest}
+                    onManualSync={handleManualSync}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="w-full pt-6 border-t border-white/10 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div>
-              <h2 className="text-lg font-black text-white">پنل مدیریت اتصالات</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                لیست اتصالات فعال و مدیریت عملیات مانیتورینگ و ویرایش خودکار
-              </p>
+              <span>AUTO RUN — سامانه هوشمند مدیریت و انتقال خودکار محتوای تلگرام</span>
             </div>
-          </div>
-
-          <div className="text-xs text-slate-400 neu-pill px-3 py-1.5 flex items-center gap-2">
-            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>تعداد کل اتصالات:</span>
-            <span className="font-bold text-yellow-400">{connections.length.toLocaleString('fa-IR')}</span>
-          </div>
-        </div>
-
-        {/* List of Connections or Empty State */}
-        {connections.length === 0 ? (
-          <div className="neu-flat p-12 text-center border border-white/5 my-8">
-            <div className="w-16 h-16 mx-auto mb-4 neu-inset rounded-2xl flex items-center justify-center text-slate-500">
-              <Layers className="w-8 h-8 text-yellow-400/50" />
+            <div className="flex items-center gap-2 dir-ltr font-mono text-slate-400">
+              <span>Auto run © 2026</span>
             </div>
-            <h3 className="text-base font-bold text-white mb-2">هیچ اتصالی هنوز ثبت نشده است</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-              برای شروع، اطلاعات کانال مبدأ، کانال مقصد و توکن ربات تلگرام خود را در فرم بالا وارد کرده و روی «شروع اتصال» کلیک کنید.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {connections.map((conn) => (
-              <ConnectionCard
-                key={conn.id}
-                connection={conn}
-                onPause={handlePause}
-                onResume={handleResume}
-                onDelete={handleDelete}
-                onOpenLogs={(c) => setSelectedLogsConn(c)}
-                onOpenMessages={(c) => setSelectedMessagesConn(c)}
-                onOpenSettings={(c) => setSelectedSettingsConn(c)}
-                onSendTest={handleSendTest}
-                onManualSync={handleManualSync}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+          </footer>
 
-      {/* Footer */}
-      <footer className="w-full max-w-5xl mx-auto px-4 pt-6 border-t border-white/5 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-3">
-        <div>
-          <span>Auto run — سامانه خودکار فروارد و انتقال محتوای کانال‌های تلگرام</span>
         </div>
-        <div className="flex items-center gap-2 dir-ltr font-mono text-slate-400">
-          <span>Auto run © 2026</span>
-        </div>
-      </footer>
+      </div>
 
       {/* Modals */}
       <ConnectionLogsModal
@@ -406,6 +448,13 @@ export default function App() {
         authToken={authToken}
         onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
         onOpenAuth={handleOpenAuth}
+      />
+
+      <NotificationsModal
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        connections={connections}
+        currentUser={currentUser}
       />
 
       <GlobalSupervisorModal

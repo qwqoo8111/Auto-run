@@ -4,13 +4,13 @@
 
 @layer base {
   :root {
-    --bg-dark: #0F172A;
-    --card-bg: #1E293B;
-    --shadow-dark: #090D16;
-    --shadow-light: #2A384E;
+    --bg-dark: #0B1220;
+    --card-bg: rgba(19, 29, 56, 0.85);
+    --shadow-dark: #050914;
+    --shadow-light: #1E2D4A;
     --accent-telegram: #229ED9;
-    --accent-telegram-hover: #38BDF8;
-    --border-dark: #334155;
+    --accent-telegram-hover: #0088CC;
+    --border-dark: rgba(51, 65, 85, 0.7);
   }
 
   body {
@@ -20,149 +20,129 @@
     direction: rtl;
     min-height: 100vh;
     overflow-x: hidden;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-/* Emerald Cyber Green Theme */
-html.theme-emerald {
-  --bg-dark: #061C14;
-  --card-bg: #0B291E;
-  --shadow-dark: #020F0A;
-  --shadow-light: #134232;
-  --accent-telegram: #10B981;
-  --accent-telegram-hover: #34D399;
-  --border-dark: #164E3D;
-  color-scheme: dark;
-}
-
-html.theme-emerald body,
-html.theme-emerald div.min-h-screen {
-  background-color: #061C14 !important;
-  color: #ECFDF5 !important;
-}
-
-html.theme-emerald .neu-flat,
-html.theme-emerald .neu-flat-interactive {
-  background: #0B291E !important;
-  border-color: #164E3D !important;
-}
-
-html.theme-emerald .neu-inset {
-  background: #04140E !important;
-  border-color: #164E3D !important;
-}
-
-/* Deep Ocean Blue Theme */
-html.theme-ocean {
-  --bg-dark: #0A1128;
-  --card-bg: #1C2541;
-  --shadow-dark: #050814;
-  --shadow-light: #2A365C;
-  --accent-telegram: #00B4D8;
-  --accent-telegram-hover: #90E0EF;
-  --border-dark: #2A385B;
-  color-scheme: dark;
-}
-
-html.theme-ocean body,
-html.theme-ocean div.min-h-screen {
-  background-color: #0A1128 !important;
-  color: #F0F8FF !important;
-}
-
-html.theme-ocean .neu-flat,
-html.theme-ocean .neu-flat-interactive {
-  background: #1C2541 !important;
-  border-color: #2A385B !important;
-}
-
-html.theme-ocean .neu-inset {
-  background: #060B1E !important;
-  border-color: #2A385B !important;
-}
-
-/* Luxury Ruby Crimson Theme */
-html.theme-ruby {
-  --bg-dark: #1A0910;
-  --card-bg: #2B111D;
-  --shadow-dark: #0D0408;
-  --shadow-light: #421B2C;
-  --accent-telegram: #E11D48;
-  --accent-telegram-hover: #FB7185;
-  --border-dark: #4C1D32;
-  color-scheme: dark;
-}
-
-html.theme-ruby body,
-html.theme-ruby div.min-h-screen {
-  background-color: #1A0910 !important;
-  color: #FFF1F2 !important;
-}
-
-html.theme-ruby .neu-flat,
-html.theme-ruby .neu-flat-interactive {
-  background: #2B111D !important;
-  border-color: #4C1D32 !important;
-}
-
-html.theme-ruby .neu-inset {
-  background: #10050A !important;
-  border-color: #4C1D32 !important;
-}
-
-/* Light Theme Overrides - Clean SaaS Layout */
+/* Light Theme - Pure white with subtle gray surfaces, soft blue accents, elegant shadows */
 html.light {
-  --bg-dark: #F5F8FC;
+  --bg-dark: #F8FAFC;
   --card-bg: #FFFFFF;
-  --shadow-dark: #E2E8F0;
+  --shadow-dark: rgba(148, 163, 184, 0.12);
   --shadow-light: #FFFFFF;
   --accent-telegram: #229ED9;
-  --accent-telegram-hover: #1B8CC8;
+  --accent-telegram-hover: #0088CC;
   --border-light: #E2E8F0;
   color-scheme: light;
 }
 
 html.light body,
 html.light div.min-h-screen {
-  background-color: #F5F8FC !important;
-  color: #1E293B !important;
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
 }
 
-/* Card & Neumorphic / SaaS Surface Elements */
-html.light .neu-flat,
+/* Card & Surface Elements - Glassmorphism & Modern Shadows */
+.neu-flat {
+  background: rgba(19, 29, 56, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25), 0 0 15px -3px rgba(34, 158, 217, 0.08);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.neu-flat-interactive {
+  background: rgba(19, 29, 56, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neu-flat-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.35), 0 0 20px 0 rgba(34, 158, 217, 0.2);
+  border-color: rgba(34, 158, 217, 0.4);
+}
+
+html.light .neu-flat {
+  background: #FFFFFF !important;
+  box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.12), 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0 !important;
+}
+
 html.light .neu-flat-interactive {
   background: #FFFFFF !important;
-  box-shadow: 0 4px 12px rgba(226, 232, 240, 0.6), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-  border-color: #E2E8F0 !important;
+  box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.12), 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0 !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html.light .neu-flat-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -3px rgba(34, 158, 217, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  border-color: #93C5FD !important;
 }
 
 html.light .neu-inset {
   background: #F1F5F9 !important;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04) !important;
-  border-color: #CBD5E1 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0 !important;
+}
+
+html.light .neu-btn-primary {
+  background: #2563EB !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 1px 2px 0 rgba(37, 99, 235, 0.2) !important;
+  border-radius: 8px;
+  border: none !important;
+}
+
+html.light .neu-btn-primary:hover {
+  background: #1D4ED8 !important;
 }
 
 html.light .neu-btn-secondary {
   background: #FFFFFF !important;
   color: #1E293B !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
-  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1 !important;
+}
+
+html.light .neu-btn-secondary:hover {
+  background: #F8FAFC !important;
+  border-color: #94A3B8 !important;
 }
 
 html.light .neu-btn-danger {
   background: #FFFFFF !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+  color: #DC2626 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid #FCA5A5 !important;
+  border-radius: 8px;
+}
+
+html.light .neu-btn-danger:hover {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
 }
 
 html.light .neu-pill {
   background: #E2E8F0 !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  border-radius: 9999px;
+  border: 1px solid #CBD5E1 !important;
 }
 
-/* Text Colors */
+/* Text Colors & Contrast in Light Theme */
 html.light .text-white {
-  color: #1E293B !important;
+  color: #0F172A !important;
 }
 
 html.light .text-slate-100,
@@ -174,12 +154,29 @@ html.light .text-slate-300 {
   color: #334155 !important;
 }
 
-html.light .text-slate-400 {
-  color: #475569 !important;
-}
-
+html.light .text-slate-400,
 html.light .text-slate-500 {
   color: #64748B !important;
+}
+
+html.light .text-sky-300 {
+  color: #0284C7 !important;
+}
+
+html.light .text-cyan-300 {
+  color: #0891B2 !important;
+}
+
+html.light .text-purple-300 {
+  color: #7E22CE !important;
+}
+
+html.light .text-amber-300 {
+  color: #D97706 !important;
+}
+
+html.light .text-emerald-300 {
+  color: #059669 !important;
 }
 
 /* Form Inputs, Selects & Textareas */
@@ -187,7 +184,7 @@ html.light input:not([type="checkbox"]),
 html.light textarea,
 html.light select {
   background-color: #FFFFFF !important;
-  color: #1E293B !important;
+  color: #0F172A !important;
   border-color: #CBD5E1 !important;
 }
 
@@ -196,22 +193,67 @@ html.light textarea::placeholder {
   color: #94A3B8 !important;
 }
 
-/* Dark Background Overrides to SaaS Light */
-html.light .bg-[#0b0e14],
-html.light .bg-[#121722],
-html.light .bg-[#0e121b],
-html.light .bg-[#0F172A],
+/* Dark Background Overrides to Professional Polish Light */
+html.light .bg-\[\#0B1220\],
+html.light .bg-\[\#0b1220\],
+html.light .bg-\[\#111C2F\],
+html.light .bg-\[\#111c2f\],
+html.light .bg-\[\#0b0e14\],
+html.light .bg-\[\#121722\],
+html.light .bg-\[\#0e121b\],
+html.light .bg-\[\#0F172A\],
 html.light .bg-slate-900,
 html.light .bg-slate-950,
+html.light .bg-black {
+  background-color: #FFFFFF !important;
+}
+
+/* Semi-Transparent Background Overrides for Light Theme */
+html.light .bg-\[\#0B1220\]\/95,
+html.light .bg-\[\#0B1220\]\/80,
+html.light .bg-\[\#0B1220\]\/70,
+html.light .bg-\[\#111C2F\]\/95,
+html.light .bg-\[\#111C2F\]\/80,
 html.light .bg-slate-900\/90,
 html.light .bg-slate-900\/95,
 html.light .bg-slate-900\/98,
-html.light .bg-black,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/90,
 html.light .bg-black\/60,
 html.light .bg-black\/70,
 html.light .bg-black\/80,
 html.light .bg-black\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Container Inner Surfaces & Button Backgrounds in Light Theme */
+html.light .bg-\[\#0B1220\]\/60,
+html.light .bg-\[\#111C2F\]\/60,
+html.light .bg-slate-800,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/60 {
+  background-color: #F1F5F9 !important;
+}
+
+/* Aside / Desktop Sidebar & Mobile Navigation Drawer in Light Theme */
+html.light aside {
   background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 10px 30px -5px rgba(148, 163, 184, 0.2) !important;
+}
+
+/* Mobile Bottom Navigation Bar in Light Theme */
+html.light nav.fixed.bottom-0 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-top-color: #E2E8F0 !important;
+  box-shadow: 0 -4px 20px rgba(148, 163, 184, 0.15) !important;
+}
+
+/* Menu items hover in light mode */
+html.light aside button:hover,
+html.light nav button:hover {
+  background-color: #F1F5F9 !important;
 }
 
 /* Modal Backdrops in Light Mode */
@@ -219,8 +261,8 @@ html.light .fixed.bg-black\/80,
 html.light .fixed.bg-black\/70,
 html.light .fixed.bg-black\/60,
 html.light .fixed.bg-slate-950\/80 {
-  background-color: rgba(15, 23, 42, 0.45) !important;
-  backdrop-filter: blur(6px);
+  background-color: rgba(15, 23, 42, 0.5) !important;
+  backdrop-filter: blur(4px);
 }
 
 /* Modal Inner Container Backgrounds */
@@ -228,7 +270,7 @@ html.light .fixed .bg-slate-900,
 html.light .fixed .bg-slate-950,
 html.light .fixed .bg-black {
   background-color: #FFFFFF !important;
-  color: #1E293B !important;
+  color: #0F172A !important;
 }
 
 /* Borders */
@@ -242,102 +284,82 @@ html.light .border-slate-700\/50 {
   border-color: #E2E8F0 !important;
 }
 
-/* Scrollbar */
-html.light ::-webkit-scrollbar-track {
-  background: #F5F8FC;
+/* Form Inputs, Selects & Textareas with Focus Glow */
+input, select, textarea {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-html.light ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: #229ED9 !important;
+  box-shadow: 0 0 0 3px rgba(34, 158, 217, 0.25) !important;
 }
 
-/* Custom SaaS Utility Classes */
-.neu-flat {
-  background: #1E293B;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  border-radius: 16px;
-  border: 1px solid #334155;
-}
-
-.neu-flat-interactive {
-  background: #1E293B;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  border-radius: 16px;
-  border: 1px solid #334155;
-  transition: all 0.2s ease-in-out;
-}
-
-.neu-flat-interactive:hover {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
-  border-color: #229ED9;
-  transform: translateY(-1px);
-}
-
+/* Custom Utility Classes */
 .neu-inset {
-  background: #0F172A;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
-  border: 1px solid #334155;
+  background: rgba(11, 18, 32, 0.9);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .neu-inset:focus-within {
   border-color: #229ED9;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(34, 158, 217, 0.25);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 3px rgba(34, 158, 217, 0.25);
 }
 
 .neu-btn-primary {
   background: #229ED9;
   color: #FFFFFF;
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(34, 158, 217, 0.3);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(34, 158, 217, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .neu-btn-primary:hover {
-  background: #1B8CC8;
-  box-shadow: 0 6px 16px rgba(34, 158, 217, 0.4);
+  background: #0088CC;
   transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(34, 158, 217, 0.4);
 }
 
 .neu-btn-primary:active {
-  transform: translateY(1px);
+  transform: translateY(0);
 }
 
 .neu-btn-secondary {
-  background: #1E293B;
+  background: rgba(30, 41, 59, 0.8);
   color: #F8FAFC;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  border-radius: 12px;
-  border: 1px solid #334155;
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .neu-btn-secondary:hover {
-  color: #229ED9;
+  color: #38BDF8;
   border-color: #229ED9;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  background: rgba(30, 41, 59, 0.95);
+  transform: translateY(-1px);
 }
 
 .neu-btn-danger {
-  background: #1E293B;
+  background: rgba(30, 41, 59, 0.8);
   color: #F87171;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(239, 68, 68, 0.3);
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .neu-btn-danger:hover {
-  background: #EF4444;
+  background: #DC2626;
   color: #FFFFFF;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transform: translateY(-1px);
 }
 
 .neu-pill {
-  background: #0F172A;
+  background: rgba(15, 23, 42, 0.8);
   border-radius: 9999px;
-  border: 1px solid #334155;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Custom scrollbar */
@@ -346,7 +368,7 @@ html.light ::-webkit-scrollbar-thumb {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0F172A;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #334155;
@@ -356,164 +378,91 @@ html.light ::-webkit-scrollbar-thumb {
   background: #229ED9;
 }
 
-/* Live Output Preview Box in Advanced Settings Modal */
-.preview-output-box {
-  background-color: rgba(6, 78, 59, 0.45);
-  border: 2px solid #22C55E;
-  color: #ecfdf5;
-  box-shadow: 0 0 15px rgba(34, 197, 94, 0.25);
+/* Animations & Keyframes */
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
-.preview-output-box .placeholder-text {
-  color: #6ee7b7;
-  opacity: 0.85;
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-modal-scale {
+  animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-toast-slide {
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 37%, rgba(255,255,255,0.03) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+html.light .skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.08) 37%, rgba(0,0,0,0.04) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Live Output Preview Box in Advanced Settings Modal */
+.preview-output-box {
+  background-color: #022C22;
+  border: 1px solid #10B981;
+  color: #ECFDF5;
+  font-family: monospace;
+  font-size: 11px;
 }
 
 html.light .preview-output-box {
-  background-color: #ecfdf5 !important;
-  border: 2px solid #22C55E !important;
-  color: #064e3b !important;
-  box-shadow: 0 2px 10px rgba(34, 197, 94, 0.15) !important;
+  background-color: #ECFDF5 !important;
+  border: 1px solid #10B981 !important;
+  color: #065F46 !important;
 }
 
-html.light .preview-output-box .placeholder-text {
-  color: #047857 !important;
-  opacity: 0.9 !important;
-}
-
-/* Sample Input Text Box in Advanced Settings Modal */
-.preview-input-box {
-  background-color: rgba(15, 23, 42, 0.6);
-  border: 1.5px solid #334155;
-  color: #F8FAFC;
-}
-
-html.light .preview-input-box {
-  background-color: #F8FAFC !important;
-  border: 1.5px solid #CBD5E1 !important;
-  color: #1E293B !important;
-}
-
-/* Admin Panel Modal Light Mode Styling */
-html.light .admin-modal-card {
-  background-color: #FFFFFF !important;
-  border-color: #CBD5E1 !important;
-  color: #1E293B !important;
-  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.1), 0 10px 15px -5px rgba(0, 0, 0, 0.05) !important;
-}
-
-html.light .admin-modal-card > div:first-child {
-  background-color: #FFFFFF !important;
-  border-bottom-color: #E2E8F0 !important;
-}
-
-html.light .admin-modal-card .bg-slate-800\/60,
-html.light .admin-modal-card .bg-slate-800\/40,
-html.light .admin-modal-card .bg-slate-800\/20,
-html.light .admin-modal-card .bg-slate-800 {
-  background-color: #F8FAFC !important;
-  border-color: #E2E8F0 !important;
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-card .bg-slate-900,
-html.light .admin-modal-card .bg-slate-900\/80,
-html.light .admin-modal-card .bg-slate-900\/50 {
-  background-color: #FFFFFF !important;
-  border-color: #E2E8F0 !important;
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-card .text-white {
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-card .text-slate-200,
-html.light .admin-modal-card .text-slate-300 {
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-card .text-slate-400 {
-  color: #475569 !important;
-}
-
-html.light .admin-modal-card .border-slate-800,
-html.light .admin-modal-card .border-slate-700,
-html.light .admin-modal-card .border-slate-700\/80,
-html.light .admin-modal-card .border-slate-700\/60,
-html.light .admin-modal-card .border-slate-700\/50 {
-  border-color: #E2E8F0 !important;
-}
-
-html.light .admin-modal-card table thead {
-  background-color: #F1F5F9 !important;
-  color: #334155 !important;
-  border-bottom-color: #CBD5E1 !important;
-}
-
-html.light .admin-modal-card table tbody tr {
-  border-bottom-color: #E2E8F0 !important;
-}
-
-html.light .admin-modal-card table tbody tr:hover {
-  background-color: #F8FAFC !important;
-}
-
-html.light .admin-modal-card input,
-html.light .admin-modal-card select {
-  background-color: #FFFFFF !important;
-  color: #1E293B !important;
-  border-color: #CBD5E1 !important;
-}
-
-/* Sub-dialogs (Edit User, Add User, Delete Confirm) in Light Mode */
-html.light .admin-modal-subdialog {
-  background-color: #FFFFFF !important;
-  border-color: #CBD5E1 !important;
-  color: #1E293B !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
-}
-
-html.light .admin-modal-subdialog label {
-  color: #334155 !important;
-}
-
-html.light .admin-modal-subdialog input,
-html.light .admin-modal-subdialog select {
-  background-color: #F8FAFC !important;
-  color: #1E293B !important;
-  border-color: #CBD5E1 !important;
-}
-
-html.light .admin-modal-subdialog .bg-slate-800 {
-  background-color: #F1F5F9 !important;
-  color: #334155 !important;
-  border-color: #CBD5E1 !important;
-}
-
-html.light .admin-modal-subdialog .bg-slate-800:hover {
-  background-color: #E2E8F0 !important;
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-subdialog .bg-slate-950 {
-  background-color: #F8FAFC !important;
-  color: #1E293B !important;
-  border-color: #CBD5E1 !important;
-}
-
-html.light .admin-modal-subdialog .text-white {
-  color: #1E293B !important;
-}
-
-html.light .admin-modal-subdialog .text-slate-300,
-html.light .admin-modal-subdialog .text-slate-400 {
-  color: #475569 !important;
-}
-
-html.light .admin-modal-subdialog .border-slate-800,
-html.light .admin-modal-subdialog .border-slate-700 {
-  border-color: #E2E8F0 !important;
+/* Console Output Terminal Styling */
+.console-terminal {
+  background-color: #020617;
+  border: 1px solid #1E293B;
+  color: #94A3B8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  border-radius: 12px;
 }
 
 

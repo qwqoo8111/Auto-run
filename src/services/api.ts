@@ -1,4 +1,4 @@
-import { TelegramConnection, ConnectionLog, ForwardedMessageRecord, CreateConnectionDTO, ConnectionStats, AdvancedSettings, User, LoginDTO, RegisterDTO, SubscriptionPlan, PurchaseRequestDTO, PurchaseRequestRecord } from '../types';
+import { TelegramConnection, ConnectionLog, ForwardedMessageRecord, CreateConnectionDTO, ConnectionStats, AdvancedSettings, User, LoginDTO, RegisterDTO, SubscriptionPlan, PurchaseRequestDTO, PurchaseRequestRecord, BroadcastMessage, AdminPermissions, ManagerLevel } from '../types';
 
 async function safeJsonFetch(url: string, options?: RequestInit, maxRetries = 5): Promise<any> {
   let lastErr: any = null;
@@ -446,6 +446,73 @@ export async function saveAutoTrendConfig(payload: AutoTrendConfig): Promise<{ o
 export async function triggerAutoTrendRunNow(): Promise<{ ok: boolean; message: string; config?: AutoTrendConfig }> {
   return safeJsonFetch('/api/experimental/auto-trends/run-now', {
     method: 'POST',
+  });
+}
+
+// Manager Broadcasts & Announcements API
+export async function fetchAdminBroadcasts(token: string): Promise<BroadcastMessage[]> {
+  return safeJsonFetch('/api/admin/broadcasts', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+}
+
+export async function sendAdminBroadcast(
+  token: string,
+  payload: {
+    type: 'info' | 'warning' | 'error' | 'admin';
+    title: string;
+    message: string;
+    targetAudience: 'all' | 'vip' | 'pro' | 'free' | string;
+    targetUsername?: string;
+    isImportant?: boolean;
+  }
+): Promise<{ success: boolean; message: string; broadcast: BroadcastMessage }> {
+  return safeJsonFetch('/api/admin/broadcasts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminBroadcast(token: string, broadcastId: string): Promise<{ success: boolean; message: string }> {
+  return safeJsonFetch(`/api/admin/broadcasts/${broadcastId}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+}
+
+// Manager Permissions API
+export async function updateManagerPermissions(
+  token: string,
+  userId: string,
+  payload: {
+    role: 'user' | 'admin';
+    managerLevel?: ManagerLevel;
+    adminTitle?: string;
+    adminPermissions?: AdminPermissions;
+  }
+): Promise<{ success: boolean; message: string; user: User }> {
+  return safeJsonFetch(`/api/admin/users/${userId}/permissions`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+// User Notifications API
+export async function fetchUserNotifications(token?: string): Promise<BroadcastMessage[]> {
+  return safeJsonFetch('/api/user/notifications', {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
   });
 }
 

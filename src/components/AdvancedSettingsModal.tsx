@@ -878,7 +878,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     <div className="flex items-center justify-between border-b border-sky-500/20 pb-2.5">
                       <div className="flex items-center gap-2 text-xs font-bold text-sky-200">
                         <Bot className="w-4.5 h-4.5 text-sky-400" />
-                        <span>تنظیمات پردازش هوش مصنوعی توییتر</span>
+                        <span>🤖 مرکز تنظیمات هوش مصنوعی بخش توییتر (X)</span>
                       </div>
                       <span className="text-[11px] font-semibold text-sky-300 bg-sky-500/15 px-2.5 py-0.5 rounded-full border border-sky-500/30 flex items-center gap-1">
                         <span>{currentProviderConfig.icon}</span>
@@ -905,23 +905,116 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       <p className="text-[11px] text-slate-400 leading-relaxed pr-6">
                         {useDefaultAiEngine
                           ? 'در این حالت، سیستم از موتور مرکزی هوش مصنوعی و کلید API اصلی تعریف شده در مرکز تنظیمات استفاده می‌کند.'
-                          : 'در صورت غیرفعال بودن، می‌توانید کلید API اختصاصی مجزا برای این بخش وارد نمایید.'}
+                          : 'در صورت غیرفعال بودن، می‌توانید کلید API اختصاصی، سرویس و مدل مجزا برای این بخش تنظیم نمایید.'}
                       </p>
                     </div>
 
-                    {/* Custom API Key Input if default AI toggle is off */}
                     {!useDefaultAiEngine && (
-                      <div className="space-y-1.5 bg-black/50 p-3 rounded-xl border border-white/10 animate-fadeIn">
-                        <label className="block text-xs font-bold text-sky-200">
-                          کلید API اختصاصی برای توییتر:
-                        </label>
-                        <input
-                          type="password"
-                          value={aiApiKey}
-                          onChange={(e) => setAiApiKey(e.target.value)}
-                          placeholder="کلید API اختصاصی..."
-                          className="w-full bg-black/70 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-sky-400 font-mono"
-                        />
+                      <div className="space-y-4 pt-1 animate-fadeIn">
+                        {/* 1. Provider Selection */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-sky-200">
+                            انتخاب سرویس هوش مصنوعی (Provider):
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                            {PROVIDERS.map((p) => (
+                              <button
+                                type="button"
+                                key={p.id}
+                                onClick={() => handleProviderSelect(p.id)}
+                                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                                  aiProvider === p.id
+                                    ? 'bg-sky-600/30 border-sky-400 text-white font-bold ring-1 ring-sky-400 shadow-lg'
+                                    : 'bg-black/40 border-white/10 text-slate-400 hover:border-sky-500/40 hover:text-sky-200'
+                                }`}
+                              >
+                                <span className="text-base">{p.icon}</span>
+                                <span className="text-xs font-bold line-clamp-1">{p.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 2. Model Selection */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-sky-200">
+                            انتخاب مدل هوش مصنوعی توییتر:
+                          </label>
+                          <select
+                            value={aiModel}
+                            onChange={(e) => setAiModel(e.target.value)}
+                            className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-sky-400 font-bold cursor-pointer"
+                          >
+                            {currentProviderConfig.models.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          {(aiModel === 'custom' || aiProvider === 'custom_openai') && (
+                            <input
+                              type="text"
+                              value={customModelInput}
+                              onChange={(e) => setCustomModelInput(e.target.value)}
+                              placeholder="نام مدل سفارشی دلخواه (مثلاً: llama-3.3-70b-versatile)..."
+                              className="w-full bg-black/70 border border-sky-500/40 px-3 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-sky-300 font-mono mt-1"
+                            />
+                          )}
+                        </div>
+
+                        {/* 3. Custom Base URL / Endpoint */}
+                        <div className="space-y-2 p-3.5 rounded-xl bg-sky-950/30 border border-sky-500/30">
+                          <label className="block text-xs font-bold text-sky-200 flex items-center gap-1.5">
+                            <Globe className="w-4 h-4 text-sky-400" />
+                            <span>آدرس API اختصاصی / Base URL (توییتر):</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={aiCustomBaseUrl}
+                            onChange={(e) => setAiCustomBaseUrl(e.target.value)}
+                            placeholder="https://api.your-custom-site.com/v1"
+                            className="w-full bg-black/70 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-sky-400 font-mono text-left dir-ltr"
+                          />
+
+                          {/* Saved Custom Services Chips */}
+                          {savedCustomServices.length > 0 && (
+                            <div className="flex gap-1.5 flex-wrap pt-1">
+                              {savedCustomServices.map((srv) => (
+                                <button
+                                  type="button"
+                                  key={srv.id}
+                                  onClick={() => {
+                                    setAiProvider('custom_openai');
+                                    setAiCustomBaseUrl(srv.baseUrl);
+                                    if (srv.apiKey) setAiApiKey(srv.apiKey);
+                                    if (srv.model) {
+                                      setAiModel(srv.model);
+                                      setCustomModelInput(srv.model);
+                                    }
+                                  }}
+                                  className="text-[10px] px-2 py-0.5 rounded bg-sky-900/40 text-sky-200 hover:bg-sky-900/60 border border-sky-500/30 cursor-pointer font-medium"
+                                >
+                                  ⚡ {srv.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 4. Dedicated API Key */}
+                        <div className="space-y-1.5 bg-black/50 p-3 rounded-xl border border-white/10">
+                          <label className="block text-xs font-bold text-sky-200">
+                            کلید API اختصاصی برای توییتر:
+                          </label>
+                          <input
+                            type="password"
+                            value={aiApiKey}
+                            onChange={(e) => setAiApiKey(e.target.value)}
+                            placeholder="کلید API اختصاصی..."
+                            className="w-full bg-black/70 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-sky-400 font-mono"
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -983,6 +1076,87 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                         <div className="p-2 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
                           <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                           <span>{aiTestError}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fallback Chain for Twitter */}
+                    <div className="pt-3 border-t border-sky-500/20 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={enableAiFallbackChain}
+                            onChange={(e) => setEnableAiFallbackChain(e.target.checked)}
+                            className="w-4 h-4 rounded text-sky-500 focus:ring-sky-400 bg-slate-900 border-white/20 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-sky-200 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-sky-400" />
+                            <span>سوییچ خودکار و زنجیره هوش مصنوعی (Fallback Chain)</span>
+                          </span>
+                        </label>
+                        <span className="text-[10px] text-sky-300/80 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+                          در صورت اتمام سهمیه یا خطای API اصلی
+                        </span>
+                      </div>
+
+                      {enableAiFallbackChain && (
+                        <div className="space-y-3 pt-2 animate-fadeIn">
+                          {aiFallbackChain.map((item, idx) => (
+                            <div key={item.id} className="p-3 rounded-xl bg-black/50 border border-sky-500/30 space-y-2.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-sky-300 border-b border-white/10 pb-1.5">
+                                <span>اولویت جایگزین #{idx + 1}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFallbackItem(item.id)}
+                                  className="p-1 hover:bg-red-500/20 rounded text-red-400 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    سرویس هوش مصنوعی:
+                                  </label>
+                                  <select
+                                    value={item.provider}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'provider', e.target.value as AiProvider)}
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none font-bold"
+                                  >
+                                    {PROVIDERS.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.icon} {p.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                    کلید API اختصاصی:
+                                  </label>
+                                  <input
+                                    type="password"
+                                    value={item.apiKey}
+                                    onChange={(e) => handleFallbackItemChange(item.id, 'apiKey', e.target.value)}
+                                    placeholder="کلید API جایگزین..."
+                                    className="w-full bg-slate-900 border border-white/15 px-2.5 py-1.5 text-xs rounded-lg text-white focus:outline-none font-mono"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddFallbackItem}
+                            className="w-full py-2 px-3 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4 text-sky-400" />
+                            <span>افزودن هوش مصنوعی جدید به زنجیره اولویت‌ها</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2889,35 +3063,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
 
 
 
-          {/* Section 5: Live Interactive Preview */}
-          <div className="space-y-2 pt-2 border-t border-white/5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-              <Eye className="w-4 h-4" />
-              <span>پیش‌نمایش خروجی نهایی پیام:</span>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <span className="text-[11px] text-slate-400 mb-1 block">متن نمونه کانال مبدأ ({connection?.sourceChannel || 'مبدأ'}):</span>
-                <textarea
-                  value={sampleText}
-                  onChange={(e) => setSampleText(e.target.value)}
-                  rows={4}
-                  className="w-full p-2.5 text-xs rounded-xl focus:outline-none resize-none transition-all duration-200 preview-input-box"
-                />
-              </div>
-
-              <div>
-                <span className="text-[11px] text-emerald-400 font-bold mb-1 flex items-center gap-1.5 block">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
-                  <span>خروجی ارسال شونده به ({connection?.targetChannel || 'مقصد'}):</span>
-                </span>
-                <div className="w-full min-h-[96px] p-3 text-xs rounded-xl whitespace-pre-wrap font-sans transition-all duration-200 preview-output-box">
-                  {getTransformedPreview() || <span className="placeholder-text italic">پیش‌نمایش نشان داده خواهد شد...</span>}
-                </div>
-              </div>
-            </div>
-          </div>
 
         </div>
 

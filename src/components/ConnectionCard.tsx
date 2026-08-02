@@ -109,138 +109,76 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
   const isWebsiteSource = connection.sourceType === 'website' || connection.sourceChannel.startsWith('http');
 
   return (
-    <div className="neu-flat p-6 border border-white/5 transition-all hover:border-yellow-400/20 rounded-3xl">
+    <div className="neu-flat p-5 md:p-6 border border-white/10 transition-all duration-300 hover:border-sky-500/40 hover:shadow-2xl hover:shadow-sky-500/10 rounded-2xl bg-[#111C2F]/80 backdrop-blur-xl">
       
       {/* Top Header Row: Source -> Target & Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
         
         {/* Source and Target Bridge */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="neu-inset px-3 py-1.5 flex items-center gap-2 text-sm font-bold text-white">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span>
+          <div className="bg-[#0B1220] border border-white/10 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-white shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
             {isTwitterSource ? (
-              <span className="flex items-center gap-1.5 text-sky-400">
-                <Twitter className="w-4 h-4 shrink-0" />
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">𝕏 ایکس</span>
+              <span className="flex items-center gap-1 text-sky-400">
+                <Twitter className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-extrabold">𝕏 ایکس</span>
               </span>
             ) : isWebsiteSource ? (
-              <span className="flex items-center gap-1.5 text-purple-400">
-                <Globe className="w-4 h-4 shrink-0" />
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">🌐 وب‌سایت</span>
+              <span className="flex items-center gap-1 text-purple-400">
+                <Globe className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-extrabold">🌐 وب</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-blue-400">
-                <Send className="w-4 h-4 shrink-0" />
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">✈️ تلگرام</span>
+              <span className="flex items-center gap-1 text-blue-400">
+                <Send className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-extrabold">✈️ تلگرام</span>
               </span>
             )}
-            <span className="dir-ltr text-right text-yellow-400">{connection.sourceChannel}</span>
+            <span className="dir-ltr text-right text-sky-300">{connection.sourceChannel}</span>
           </div>
 
-          <ArrowLeft className="w-5 h-5 text-blue-400 shrink-0" />
+          <ArrowLeft className="w-4 h-4 text-sky-400 shrink-0" />
 
-          <div className="neu-inset px-3 py-1.5 flex items-center gap-2 text-sm font-bold text-white">
-            <Bot className="w-4 h-4 text-blue-400" />
-            <span className="dir-ltr text-right text-blue-400">{connection.targetChannel}</span>
+          <div className="bg-[#0B1220] border border-white/10 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-white shadow-inner">
+            <Bot className="w-3.5 h-3.5 text-sky-400" />
+            <span className="dir-ltr text-right text-sky-400">{connection.targetChannel}</span>
           </div>
         </div>
 
         {/* Status Badge & Settings Indicator */}
         <div className="flex items-center gap-2 flex-wrap">
           {isBaleActive && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm" title={`ارسال همزمان به کانال بله (${baleTarget})`}>
-              <span className="text-emerald-400 font-extrabold">🇮🇷 بله:</span>
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title={`ارسال به بله (${baleTarget})`}>
+              <span className="text-emerald-400">🇮🇷 بله:</span>
               <span className="dir-ltr">{baleTarget || 'فعال'}</span>
-              {(connection.baleReplaceId || connection.settings?.baleReplaceId) && (
-                <span className="text-[10px] text-emerald-400/80 dir-ltr">(جایگزین: {connection.baleReplaceId || connection.settings?.baleReplaceId})</span>
-              )}
             </span>
           )}
 
           {isXActive && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 shadow-sm" title={`ارسال همزمان به پیج‌های ایکس (${xHandles})`}>
-              <Twitter className="w-3.5 h-3.5 text-sky-400" />
-              <span className="text-sky-400 font-extrabold">𝕏 ایکس:</span>
-              <span className="dir-ltr truncate max-w-[140px]">{xHandles || 'فعال'}</span>
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30 flex items-center gap-1" title={`ارسال به ایکس (${xHandles})`}>
+              <Twitter className="w-3 h-3 text-sky-400" />
+              <span>𝕏: {xHandles || 'فعال'}</span>
             </span>
-          )}
-
-          {isWebActive && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 shadow-sm" title={`اتصال به وب‌سایت (${webTarget})`}>
-              <Globe className="w-3.5 h-3.5 text-purple-400" />
-              <span className="text-purple-400 font-extrabold">🌐 سایت:</span>
-              <span className="dir-ltr truncate max-w-[120px]">{webTarget || 'فعال'}</span>
-            </span>
-          )}
-
-          {!isTwitterSource && !isWebsiteSource && (
-            connection.settings?.preventDuplicates !== false ? (
-              <button
-                onClick={() => onOpenSettings(connection)}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-                  connection.settings?.duplicateAction === 'delete_existing'
-                    ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
-                    : 'bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
-                }`}
-                title={
-                  connection.settings?.duplicateAction === 'delete_existing'
-                    ? "سیستم جایگزینی خودکار پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
-                    : "سیستم هوشمند جلوگیری از ارسال پست‌های تکراری با آستانه " + (connection.settings?.duplicateSimilarityThreshold ?? 80) + "% فعال است"
-                }
-              >
-                <CopyCheck className={`w-3.5 h-3.5 ${connection.settings?.duplicateAction === 'delete_existing' ? 'text-rose-400' : 'text-amber-400'}`} />
-                <span>
-                  {connection.settings?.duplicateAction === 'delete_existing' ? 'ضد تکرار و جایگزینی (' : 'ضد تکرار فعال ('}
-                  {(connection.settings?.duplicateSimilarityThreshold ?? 80).toLocaleString('fa-IR')}٪)
-                </span>
-              </button>
-            ) : (
-              <button
-                onClick={() => onOpenSettings(connection)}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                title="سیستم جلوگیری از پست‌های تکراری غیرفعال است"
-              >
-                <CopyCheck className="w-3.5 h-3.5 text-slate-500" />
-                <span>ضد تکرار غیرفعال</span>
-              </button>
-            )
-          )}
-
-          {hasCustomSettings && (
-            <button
-              onClick={() => onOpenSettings(connection)}
-              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 flex items-center gap-1 hover:bg-yellow-400/20 transition-colors"
-              title="تنظیمات پیشرفته برای این اتصال فعال است"
-            >
-              <Replace className="w-3.5 h-3.5" />
-              <span>تنظیمات پیشرفته ({rulesCount} قانون)</span>
-            </button>
           )}
 
           {connection.status === 'active' && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              وضعیت: فعال
+              فعال
             </span>
           )}
 
           {connection.status === 'paused' && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
-              <Pause className="w-3.5 h-3.5" />
-              وضعیت: متوقف شده
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
+              <Pause className="w-3 h-3" />
+              متوقف
             </span>
           )}
 
           {connection.status === 'error' && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              وضعیت: دارای خطا
-            </span>
-          )}
-
-          {connection.botName && (
-            <span className="hidden sm:inline-block text-xs neu-pill px-3 py-1 text-slate-400 font-mono">
-              {connection.botName}
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-red-500/15 text-red-400 border border-red-500/30 flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3" />
+              خطا
             </span>
           )}
         </div>
@@ -248,45 +186,45 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
       </div>
 
       {/* Info Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 my-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 my-4">
         
         {/* Last Message Time */}
-        <div className="neu-inset p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 neu-inset">
-            <Clock className="w-5 h-5" />
+        <div className="bg-[#0B1220]/70 border border-white/5 p-3 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-500/20">
+            <Clock className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium">زمان آخرین دریافت پیام</div>
-            <div className="text-xs font-bold text-white mt-1">
+            <div className="text-[10px] text-slate-400 font-bold">زمان آخرین پیام</div>
+            <div className="text-xs font-bold text-white mt-0.5">
               {formatPersianDate(connection.lastMessageTime)}
             </div>
           </div>
         </div>
 
         {/* Transferred Messages Counter */}
-        <div className="neu-inset p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-yellow-400/10 text-yellow-400 neu-inset">
-            <MessageSquare className="w-5 h-5" />
+        <div className="bg-[#0B1220]/70 border border-white/5 p-3 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+            <MessageSquare className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium">تعداد پیام‌های منتقل‌شده</div>
-            <div className="text-base font-black text-yellow-400 mt-0.5">
-              {connection.transferredCount.toLocaleString('fa-IR')} <span className="text-xs text-slate-400 font-normal">پست</span>
+            <div className="text-[10px] text-slate-400 font-bold">تعداد پیام‌های منتقل‌شده</div>
+            <div className="text-sm font-black text-emerald-400 mt-0.5">
+              {connection.transferredCount.toLocaleString('fa-IR')} <span className="text-[10px] text-slate-400 font-normal">پست</span>
             </div>
           </div>
         </div>
 
         {/* Last Message ID / Source Title */}
-        <div className="neu-inset p-3.5 flex items-center gap-3 sm:col-span-2 lg:col-span-1">
-          <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 neu-inset">
-            <Activity className="w-5 h-5" />
+        <div className="bg-[#0B1220]/70 border border-white/5 p-3 rounded-xl flex items-center gap-3 sm:col-span-2 lg:col-span-1">
+          <div className="p-2 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/20">
+            <Activity className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium">آخرین ID پیام / عنوان کانال</div>
-            <div className="text-xs font-bold text-white mt-1 flex items-center gap-2">
-              <span>{connection.sourceTitle || connection.sourceChannel}</span>
+            <div className="text-[10px] text-slate-400 font-bold">عنوان کانال مبدأ</div>
+            <div className="text-xs font-bold text-white mt-0.5 flex items-center gap-2">
+              <span className="truncate max-w-[130px]">{connection.sourceTitle || connection.sourceChannel}</span>
               {connection.lastMessageId && (
-                <span className="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono text-[11px]">
+                <span className="text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded font-mono text-[10px]">
                   #{connection.lastMessageId}
                 </span>
               )}
@@ -296,73 +234,16 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
 
       </div>
 
-      {/* Multi-Channel Destinations Breakdown Box */}
-      <div className="mb-4 p-3.5 rounded-2xl neu-inset bg-slate-900/60 border border-white/5 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-            <Layers className="w-4 h-4 text-yellow-400" />
-            <span>کانال‌ها و مقصد‌های متصل به این مانیتورینگ:</span>
-          </div>
-          <button
-            onClick={() => onOpenSettings(connection)}
-            className="text-[11px] text-yellow-400 hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <span>+ ویرایش مقاصد</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          {/* Telegram Destination */}
-          <div className="px-2.5 py-1 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 flex items-center gap-1.5 font-mono">
-            <Bot className="w-3.5 h-3.5 text-blue-400" />
-            <span>تلگرام:</span>
-            <span className="font-bold text-white">{connection.targetChannel}</span>
-          </div>
-
-          {/* Bale Destination */}
-          {isBaleActive && (
-            <div className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 font-mono">
-              <span className="text-emerald-400 font-extrabold">🇮🇷 بله:</span>
-              <span className="font-bold text-white">{baleTarget || 'فعال'}</span>
-            </div>
-          )}
-
-          {/* X (Twitter) Destinations */}
-          {isXActive && xHandles && (
-            xHandles.split(',').map((h, idx) => {
-              const handleClean = h.trim();
-              if (!handleClean) return null;
-              return (
-                <div key={idx} className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 flex items-center gap-1.5 font-mono">
-                  <Twitter className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span>ایکس 𝕏:</span>
-                  <span className="font-bold text-white dir-ltr">{handleClean}</span>
-                </div>
-              );
-            })
-          )}
-
-          {/* Web Destination */}
-          {isWebActive && webTarget && (
-            <div className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center gap-1.5 font-mono">
-              <Globe className="w-3.5 h-3.5 text-purple-400" />
-              <span>وب‌سایت:</span>
-              <span className="font-bold text-white dir-ltr truncate max-w-[200px]">{webTarget}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Error Message if any */}
       {connection.lastError && (
-        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center gap-2">
+        <div className="mb-3 p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
           <span>{connection.lastError}</span>
         </div>
       )}
 
       {/* Action Buttons Row */}
-      <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5 flex-wrap">
+      <div className="flex items-center justify-between gap-2 pt-3 border-t border-white/10 flex-wrap">
         
         {/* Left Side Actions: Pause / Resume & Delete */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -370,8 +251,8 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
             <button
               onClick={handlePause}
               disabled={isActionLoading}
-              className="neu-btn-secondary px-4 py-2 text-xs font-bold flex items-center gap-2 text-amber-400 hover:text-amber-300"
-              title="توقف موقت مانیتورینگ کانال"
+              className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="توقف موقت"
             >
               <Pause className="w-3.5 h-3.5" />
               <span>توقف</span>
@@ -380,28 +261,28 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
             <button
               onClick={handleResume}
               disabled={isActionLoading}
-              className="neu-btn-primary px-4 py-2 text-xs font-bold flex items-center gap-2"
-              title="شروع مجدد مانیتورینگ"
+              className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="شروع مجدد"
             >
-              <Play className="w-3.5 h-3.5 fill-black" />
-              <span>شروع مجدد</span>
+              <Play className="w-3.5 h-3.5 fill-emerald-300" />
+              <span>ادامه</span>
             </button>
           )}
 
           <button
             onClick={() => onOpenSettings(connection)}
-            className="neu-btn-secondary px-3.5 py-2 text-xs font-bold flex items-center gap-2 text-yellow-400 hover:text-yellow-300 border border-yellow-400/20"
-            title="تنظیمات پیشرفته و فیلترها"
+            className="px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 hover:bg-sky-500/25 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="تنظیمات پیشرفته"
           >
             <Sliders className="w-3.5 h-3.5" />
-            <span>تنظیمات پیشرفته</span>
+            <span>تنظیمات</span>
           </button>
 
           <button
             onClick={handleDelete}
             disabled={isActionLoading}
-            className="neu-btn-danger px-3.5 py-2 text-xs font-bold flex items-center gap-2"
-            title="حذف کامل این اتصال"
+            className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="حذف اتصال"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>حذف</span>
@@ -409,50 +290,47 @@ export const ConnectionCard: React.FC<ConnectionCardProps> = ({
         </div>
 
         {/* Right Side Tools: Logs, Messages Preview, Sync, Test */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => onOpenLogs(connection)}
-            className="neu-btn-secondary px-3 py-2 text-xs font-medium flex items-center gap-1.5 text-slate-300"
-            title="مشاهده لاگ‌های سیستم"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+            title="لاگ‌ها"
           >
-            <FileText className="w-3.5 h-3.5 text-yellow-400" />
+            <FileText className="w-3.5 h-3.5 text-amber-400" />
             <span>لاگ‌ها</span>
           </button>
 
           <button
             onClick={() => onOpenMessages(connection)}
-            className="neu-btn-secondary px-3 py-2 text-xs font-medium flex items-center gap-1.5 text-slate-300"
-            title="مشاهده پیام‌های منتقل‌شده"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+            title="پیام‌ها"
           >
-            <List className="w-3.5 h-3.5 text-blue-400" />
+            <List className="w-3.5 h-3.5 text-sky-400" />
             <span>پیام‌ها</span>
           </button>
 
           <button
             onClick={handleSync}
             disabled={isActionLoading}
-            className="neu-btn-secondary px-3 py-2 text-xs font-medium flex items-center gap-1.5 text-slate-300"
-            title="بررسی فوری پست‌های جدید"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+            title="همگام‌سازی آنلاین"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isActionLoading ? 'animate-spin' : ''}`} />
-            <span>بررسی آنلاین</span>
+            <span>همگام‌سازی</span>
           </button>
 
           <button
             onClick={handleTest}
             disabled={isActionLoading}
-            className="neu-btn-secondary px-3 py-2 text-xs font-medium flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300"
-            title="ارسال پیام تست به کانال مقصد"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+            title="تست ارسال"
           >
             {testSentSuccess ? (
-              <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400">ارسال شد</span>
-              </>
+              <span className="text-emerald-400 font-bold">ارسال شد ✓</span>
             ) : (
               <>
-                <Send className="w-3.5 h-3.5" />
-                <span>تست ارسال</span>
+                <Send className="w-3.5 h-3.5 text-purple-400" />
+                <span>تست</span>
               </>
             )}
           </button>
