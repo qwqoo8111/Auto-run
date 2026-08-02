@@ -753,7 +753,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
           {/* ========================================================= */}
           {/* 1. TWITTER (X) SPECIFIC ADVANCED SETTINGS                 */}
           {/* ========================================================= */}
-          {isTwitterSource && (
+          {connection && isTwitterSource && (
             <>
               {/* Informational Banner */}
               <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/25 text-sky-200 text-xs flex items-center gap-2.5">
@@ -761,39 +761,472 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                 <div>
                   <span className="font-bold block text-sky-300">تنظیمات اختصاصی توییتر (X):</span>
                   <span className="text-[11px] opacity-90 leading-relaxed block mt-0.5">
-                    در این بخش می‌توانید پاکسازی لینک مبدأ و آیدی‌های توییتر را فعال کرده و لینک کانال تلگرام خود (امضا) را تنظیم نمایید.
+                    پیکربندی فیلتر محتوا (متن، عکس، ویدیو)، عدم نمایش پیج مبدأ، تنظیمات هوش مصنوعی، ضد تبلیغات، فیلتر کلمات ممنوعه و امضای اختصاصی.
                   </span>
                 </div>
               </div>
 
-              {/* 1. Remove Source Link Option */}
-              <div className="neu-inset p-4 rounded-xl border border-white/5 space-y-3">
-                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>تنظیمات پاکسازی لینک مبدأ توییتر</span>
+              {/* 1. Media & Content Types Forwarding Filter */}
+              <div className="p-4 rounded-xl neu-inset bg-sky-950/20 border border-sky-500/20 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-sky-300 border-b border-sky-500/15 pb-2.5">
+                  <Sliders className="w-4 h-4 text-sky-400" />
+                  <span>فیلتر و مدیریت ارسال محتوای توییت‌ها (متن، عکس، ویدیو)</span>
                 </div>
 
-                <label className="flex items-start gap-3 neu-inset p-3.5 cursor-pointer hover:bg-white/5 transition-colors rounded-xl border border-white/5">
-                  <input
-                    type="checkbox"
-                    checked={removeSourceLinks}
-                    onChange={(e) => setRemoveSourceLinks(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-emerald-400 rounded cursor-pointer"
-                  />
-                  <div className="text-xs">
-                    <span className="font-bold text-white block">حذف لینک مبدأ (حذف لینک‌های توییتر، t.co و آیدی پیج مبدأ)</span>
-                    <span className="text-slate-400 mt-0.5 block text-[11px] leading-relaxed">
-                      با فعال بودن این گزینه، لینک‌های اختصاصی توییت (twitter.com / x.com / t.co) و آیدی حساب توییتر {connection?.sourceChannel || 'مبدأ'} از متن توییت پاکسازی می‌شوند تا لینک پیج مبدا یا لینکهای t.co در پیام نباشد.
-                    </span>
-                  </div>
-                </label>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  💡 تعیین کنید چه نوع محتوایی از توییت‌های حساب مبدأ استخراج و فوروارد شود. اگر توییت حاوی متن، عکس و ویدیو باشد، به صورت همزمان فوروارد می‌گردند:
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  {[
+                    { id: 'all', label: 'همزمان همه (متن + عکس + ویدیو)', desc: 'فوروارد کامل تمام رسانه‌ها و متن' },
+                    { id: 'text_only', label: 'فقط متن توییت', desc: 'حذف تمامی تصاویر و ویدیوها' },
+                    { id: 'photo_only', label: 'فقط تصاویر', desc: 'فوروارد عکس‌ها بدون متن' },
+                    { id: 'video_only', label: 'فقط ویدیوها', desc: 'فوروارد ویدیوها بدون متن' },
+                    { id: 'photo_text', label: 'عکس + متن', desc: 'عدم ارسال ویدیوها' },
+                    { id: 'video_text', label: 'ویدیو + متن', desc: 'عدم ارسال تصاویر' },
+                  ].map((filter) => (
+                    <button
+                      type="button"
+                      key={filter.id}
+                      onClick={() => setContentFilter(filter.id as ContentFilter)}
+                      className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                        contentFilter === filter.id
+                          ? 'bg-sky-600/25 border-sky-400 text-sky-200 font-bold shadow-md'
+                          : 'bg-black/30 border-white/10 text-slate-400 hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{filter.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{filter.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Telegram Channel Link / Signature */}
+              {/* 2. Source Anonymity & Link Cleanup */}
+              <div className="neu-inset p-4 space-y-3 border border-white/5 rounded-xl">
+                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 border-b border-white/10 pb-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>تنظیمات عدم نمایش پیج مبدأ و پاکسازی لینک‌ها</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-start gap-3 neu-inset p-3.5 cursor-pointer hover:bg-white/5 transition-colors rounded-xl border border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={removeSourceLinks}
+                      onChange={(e) => setRemoveSourceLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded cursor-pointer"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">پنهان‌سازی پیج مبدأ (حذف آیدی @ و لینک‌های x.com / t.co)</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px] leading-relaxed">
+                        با فعال بودن این گزینه، آیدی پیج توییتر {connection?.sourceChannel || 'مبدأ'}، لینک‌های مستقیم توییت و لینک‌های کوتاه t.co کلاً از متن حذف می‌شوند تا منبع مشخص نباشد.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 neu-inset p-3.5 cursor-pointer hover:bg-white/5 transition-colors rounded-xl border border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={cleanTagsAndLinks}
+                      onChange={(e) => setCleanTagsAndLinks(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-emerald-400 rounded cursor-pointer"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">پاکسازی کلی تمام هشتگ‌ها (#) و لینک‌های وب</span>
+                      <span className="text-slate-400 mt-0.5 block text-[11px] leading-relaxed">
+                        حذف تمامی هشتگ‌های توییتر و آدرس‌های سایت‌های موجود در متن توییت استخراج شده.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* 3. AI Content Rewrite & Generation Settings for Twitter */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <Sparkles className="w-4 h-4 text-sky-400" />
+                  <span>تنظیمات بازنویسی و هوش مصنوعی محتوای توییتر</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { id: 'none', label: 'بدون تغییر', desc: 'ارسال مستقیم و بدون تغییر متن توییت' },
+                    { id: 'ai', label: 'بازنویسی با هوش مصنوعی', desc: 'بهینه‌سازی، خلاصه‌سازی یا ساخت مجدد متن' },
+                    { id: 'replace', label: 'جایگزینی کلمات', desc: 'تغییر کلمات بر اساس قوانین شما' },
+                  ].map((mode) => (
+                    <button
+                      type="button"
+                      key={mode.id}
+                      onClick={() => setRewriteMode(mode.id as RewriteMode)}
+                      className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
+                        rewriteMode === mode.id
+                          ? 'bg-sky-500/15 border-sky-400 text-sky-300 font-bold'
+                          : 'bg-black/20 border-white/5 text-slate-400 hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{mode.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI Settings Options if rewriteMode === 'ai' */}
+                {rewriteMode === 'ai' && (
+                  <div className="neu-inset p-4 space-y-4 rounded-xl border border-sky-500/30 bg-sky-950/15">
+                    <div className="flex items-center justify-between border-b border-sky-500/20 pb-2.5">
+                      <div className="flex items-center gap-2 text-xs font-bold text-sky-200">
+                        <Bot className="w-4.5 h-4.5 text-sky-400" />
+                        <span>تنظیمات پردازش هوش مصنوعی توییتر</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-sky-300 bg-sky-500/15 px-2.5 py-0.5 rounded-full border border-sky-500/30 flex items-center gap-1">
+                        <span>{currentProviderConfig.icon}</span>
+                        <span>{currentProviderConfig.name}</span>
+                      </span>
+                    </div>
+
+                    {/* Central AI Engine Switch Toggle */}
+                    <div className="p-3.5 rounded-xl bg-black/40 border border-sky-500/30 space-y-2">
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <Cpu className="w-4 h-4 text-sky-400" />
+                          <span className="text-xs font-bold text-sky-200">
+                            استفاده از موتور پیش‌فرض هوش مصنوعی سیستم (موتور مرکزی)
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={useDefaultAiEngine}
+                          onChange={(e) => setUseDefaultAiEngine(e.target.checked)}
+                          className="w-4 h-4 rounded text-sky-500 focus:ring-sky-400 bg-slate-900 border-white/20 cursor-pointer"
+                        />
+                      </label>
+                      <p className="text-[11px] text-slate-400 leading-relaxed pr-6">
+                        {useDefaultAiEngine
+                          ? 'در این حالت، سیستم از موتور مرکزی هوش مصنوعی و کلید API اصلی تعریف شده در مرکز تنظیمات استفاده می‌کند.'
+                          : 'در صورت غیرفعال بودن، می‌توانید کلید API اختصاصی مجزا برای این بخش وارد نمایید.'}
+                      </p>
+                    </div>
+
+                    {/* Custom API Key Input if default AI toggle is off */}
+                    {!useDefaultAiEngine && (
+                      <div className="space-y-1.5 bg-black/50 p-3 rounded-xl border border-white/10 animate-fadeIn">
+                        <label className="block text-xs font-bold text-sky-200">
+                          کلید API اختصاصی برای توییتر:
+                        </label>
+                        <input
+                          type="password"
+                          value={aiApiKey}
+                          onChange={(e) => setAiApiKey(e.target.value)}
+                          placeholder="کلید API اختصاصی..."
+                          className="w-full bg-black/70 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-sky-400 font-mono"
+                        />
+                      </div>
+                    )}
+
+                    {/* Prompt Configuration */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-sky-200">
+                          پرامپت و دستورالعمل بازنویسی هوش مصنوعی:
+                        </label>
+                        <span className="text-[10px] text-slate-400">پیش‌فرض‌های سریع:</span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 pb-1">
+                        {[
+                          { name: '✨ جذاب و روان', prompt: 'متن این توییت را به صورتی بسیار جذاب، روان، پرمخاطب و بدون لینک‌های مبدأ بازنویسی کن:' },
+                          { name: '📌 خلاصه‌سازی', prompt: 'نکات کلیدی این توییت را به صورت خلاصه و بولت‌پوینت روان تلگرامی تبدیل کن:' },
+                          { name: '👔 لحن رسمی', prompt: 'متن توییت زیر را با لحنی کاملا رسمی، خبری و حرفه‌ای بازنویسی نما:' },
+                          { name: '🧵 رشته توییت', prompt: 'توییت زیر را به یک پست جامع و تحلیلی برای کانال تلگرام تبدیل کن:' },
+                        ].map((p) => (
+                          <button
+                            type="button"
+                            key={p.name}
+                            onClick={() => setAiPrompt(p.prompt)}
+                            className="px-2.5 py-1 rounded-lg bg-sky-900/40 hover:bg-sky-900/70 text-sky-200 border border-sky-500/30 text-[10px] font-bold transition-all cursor-pointer"
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        rows={3}
+                        placeholder="دستور هوش مصنوعی برای توییت‌ها..."
+                        className="w-full bg-black/60 border border-white/15 p-2.5 text-xs rounded-xl text-white focus:outline-none focus:border-sky-400 resize-none font-sans"
+                      />
+                    </div>
+
+                    {/* Live Test Button */}
+                    <div className="pt-2 border-t border-sky-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={handleTestAi}
+                        disabled={testingAi}
+                        className="px-4 py-2 bg-sky-600/30 border border-sky-400/50 text-sky-200 hover:bg-sky-600/50 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-300" /> : <Sparkles className="w-3.5 h-3.5 text-sky-400" />}
+                        <span>تست ارتباط و بازنویسی نمونه</span>
+                      </button>
+
+                      {aiTestResult && (
+                        <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>تست هوش مصنوعی با موفقیت انجام شد!</span>
+                        </div>
+                      )}
+                      {aiTestError && (
+                        <div className="p-2 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                          <span>{aiTestError}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Replacement Rules Table if rewriteMode === 'replace' */}
+                {rewriteMode === 'replace' && (
+                  <div className="neu-inset p-4 space-y-3 rounded-xl border border-blue-500/30 bg-blue-950/15">
+                    <div className="flex items-center justify-between border-b border-blue-500/20 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+                        <Replace className="w-4 h-4 text-blue-400" />
+                        <span>جدول جایگزینی کلمات توییت</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddRule}
+                        className="neu-btn-primary px-2.5 py-1 text-[11px] font-bold text-black flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>افزودن کلمه</span>
+                      </button>
+                    </div>
+
+                    {replacements.length === 0 ? (
+                      <div className="text-center text-xs text-slate-500 py-3">
+                        هیچ قانونی تعریف نشده است.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {replacements.map((rule, idx) => (
+                          <div key={rule.id} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 w-4">{idx + 1}.</span>
+                            <input
+                              type="text"
+                              value={rule.find}
+                              onChange={(e) => handleRuleChange(rule.id, 'find', e.target.value)}
+                              placeholder="کلمه/عبارت مبدأ"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-yellow-400 dir-ltr text-right"
+                            />
+                            <span className="text-slate-500 text-xs">➔</span>
+                            <input
+                              type="text"
+                              value={rule.replace}
+                              onChange={(e) => handleRuleChange(rule.id, 'replace', e.target.value)}
+                              placeholder="کلمه جدید (یا خالی برای حذف)"
+                              className="flex-1 bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs rounded-lg text-white focus:border-blue-400 dir-ltr text-right"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRule(rule.id)}
+                              className="p-1.5 text-red-400 hover:text-red-300 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Forbidden Keywords Filter */}
+              <div className="p-4 rounded-2xl neu-inset bg-rose-500/5 border border-rose-500/20 space-y-3">
+                <div className="flex items-center gap-2 border-b border-rose-500/15 pb-2.5">
+                  <Filter className="w-5 h-5 text-rose-400" />
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-300">🚫 فیلتر کلمات ممنوعه در توییتر</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      در صورت وجود کلمات کلیدی زیر در توییت مبدأ، پیام کلا نادیده گرفته می‌شود.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newForbiddenWord}
+                    onChange={(e) => setNewForbiddenWord(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddForbiddenWord();
+                      }
+                    }}
+                    placeholder="کلمه ممنوعه جدید را وارد کنید..."
+                    className="flex-1 bg-black/40 border border-white/15 px-3 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-rose-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddForbiddenWord()}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>افزودن</span>
+                  </button>
+                </div>
+
+                {forbiddenKeywords.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 text-center py-1">
+                    هیچ کلمه ممنوعه‌ای ثبت نشده است. همه توییت‌ها مجاز خواهند بود.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {forbiddenKeywords.map((word) => (
+                      <span
+                        key={word}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-950/60 text-rose-200 border border-rose-500/30 text-xs font-medium"
+                      >
+                        <span>{word}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveForbiddenWord(word)}
+                          className="hover:text-red-400 text-slate-400 transition-colors p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. AI Ad Detection */}
+              <div className="p-4 rounded-2xl neu-inset bg-purple-500/5 border border-purple-500/20 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-purple-500/15 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-purple-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-purple-300">📢 سیستم هوشمند تشخیص توییت‌های تبلیغاتی</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        شناسایی خودکار توییت‌های اسپانسری، آگهی فروش، پروژه‌های رمزارز نامعتبر یا لینک‌های تبلیغاتی.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-xl border border-purple-500/30 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={enableAdDetection}
+                      onChange={(e) => setEnableAdDetection(e.target.checked)}
+                      className="w-4 h-4 accent-purple-400 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-purple-200">فعال‌سازی ضد تبلیغات</span>
+                  </label>
+                </div>
+
+                {enableAdDetection && (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('keywords')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'keywords'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🏷️ کلمات کلیدی تبلیغاتی
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('ai')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'ai'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🤖 تشخیص با هوش مصنوعی
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdDetectionMethod('both')}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                          adDetectionMethod === 'both'
+                            ? 'bg-purple-600/30 border-purple-400 text-white shadow'
+                            : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ ترکیبی (کلمات + AI)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 6. Duplicate Protection */}
+              <div className="p-4 rounded-xl neu-inset bg-amber-500/5 border border-amber-500/20 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/15 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CopyCheck className="w-5 h-5 text-amber-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-300">سیستم هوشمند تشخیص توییت‌های تکراری</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        سنجش شباهت متن توییت‌ها و نادیده گرفتن توییت‌های تکراری قبل از ارسال به کانال.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={preventDuplicates}
+                      onChange={(e) => setPreventDuplicates(e.target.checked)}
+                      className="w-4 h-4 accent-amber-400 rounded"
+                    />
+                    <span className="text-xs font-bold text-amber-200">فعال‌سازی سیستم ضد تکرار</span>
+                  </label>
+                </div>
+
+                {preventDuplicates && (
+                  <div className="space-y-4 animate-fadeIn pt-1">
+                    <div className="space-y-3 bg-black/30 p-3.5 rounded-2xl border border-white/5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="text-xs font-bold text-slate-200">
+                          درصد آستانه تشخیص شباهت:
+                        </label>
+                        <span className="text-amber-400 font-extrabold dir-rtl text-sm bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/30">
+                          {duplicateSimilarityThreshold.toLocaleString('fa-IR')}٪ شباهت
+                        </span>
+                      </div>
+
+                      <input
+                        type="range"
+                        min={50}
+                        max={100}
+                        step={5}
+                        value={duplicateSimilarityThreshold}
+                        onChange={(e) => setDuplicateSimilarityThreshold(Number(e.target.value))}
+                        className="w-full accent-amber-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 7. Signature & Telegram Channel Link */}
               <div className="space-y-2 neu-inset p-4 rounded-xl border border-white/5">
                 <label className="block text-xs font-bold text-white flex items-center gap-1.5">
                   <Tag className="w-4 h-4 text-yellow-400" />
-                  <span>امضا / لینک کانال تلگرام (که به انتهای توییت اضافه می‌شود):</span>
+                  <span>امضا / لینک کانال تلگرام مقصد (پیوست انتهای پیام):</span>
                 </label>
                 <div className="p-2 rounded-xl border border-white/10 bg-black/40">
                   <textarea
@@ -805,7 +1238,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   />
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  💡 این امضا (لینک کانال تلگرام شما) به انتهای تمامی توییت‌های استخراج شده از این حساب توییتر پیوست می‌گردد.
+                  💡 این امضا (لینک کانال تلگرام شما) به انتهای تمامی توییت‌های استخراج شده پیوست می‌گردد.
                 </p>
               </div>
             </>
@@ -814,7 +1247,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
           {/* ========================================================= */}
           {/* 2. WEBSITE (RSS) SPECIFIC ADVANCED SETTINGS               */}
           {/* ========================================================= */}
-          {isWebsiteSource && (
+          {connection && isWebsiteSource && (
             <>
               <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/25 text-purple-200 text-xs flex items-center gap-2.5">
                 <Globe className="w-5 h-5 text-purple-400 shrink-0" />
@@ -1176,7 +1609,7 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
           {/* ========================================================= */}
           {/* CENTRAL AI SETTINGS & AUTOMATION MODE (WHEN !connection)   */}
           {/* ========================================================= */}
-          {!connection ? (
+          {!connection && (
             <div className="space-y-5">
               {/* Central AI Banner & Info */}
               <div className="p-4 rounded-2xl bg-purple-900/20 border border-purple-500/30 text-xs text-purple-200 leading-relaxed space-y-2">
@@ -1617,7 +2050,12 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                 )}
               </div>
             </div>
-          ) : !isTwitterSource && !isWebsiteSource && (
+          )}
+
+          {/* ========================================================= */}
+          {/* 4. TELEGRAM SPECIFIC ADVANCED SETTINGS                    */}
+          {/* ========================================================= */}
+          {connection && !isTwitterSource && !isWebsiteSource && (
             <>
               {/* Section 1: Content Filter (چه محتواهایی فوروارد شوند؟) */}
               <div className="neu-inset p-4 space-y-3 border border-white/5">
@@ -2321,72 +2759,105 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Section 10: Telegram Proxy Configuration */}
+              <div className="space-y-3 pt-3 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={enableProxy}
+                      onChange={(e) => setEnableProxy(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-500 focus:ring-blue-400 bg-slate-900 border-white/20 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-blue-400" />
+                      <span>تنظیمات پروکسی تلگرام (MTProto / SOCKS5)</span>
+                    </span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                    جهت عبور از فیلترینگ تلگرام
+                  </span>
+                </div>
+
+                {enableProxy && (
+                  <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-500/30 space-y-3 animate-fadeIn">
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-bold text-slate-300">نوع پروکسی:</span>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="proxyType"
+                          value="mtproto"
+                          checked={proxyType === 'mtproto'}
+                          onChange={() => setProxyType('mtproto')}
+                          className="accent-blue-500"
+                        />
+                        <span>MTProto</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="proxyType"
+                          value="socks5"
+                          checked={proxyType === 'socks5'}
+                          onChange={() => setProxyType('socks5')}
+                          className="accent-blue-500"
+                        />
+                        <span>SOCKS5</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-300">
+                        آدرس پروکسی (Proxy URL / Connection String):
+                      </label>
+                      <input
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => setProxyUrl(e.target.value)}
+                        placeholder={proxyType === 'mtproto' ? "tg://proxy?server=...&port=...&secret=..." : "socks5://user:pass@host:port"}
+                        className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
-          {/* Section 10: Telegram Proxy Configuration */}
-          <div className="space-y-3 pt-3 border-t border-white/5">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={enableProxy}
-                  onChange={(e) => setEnableProxy(e.target.checked)}
-                  className="w-4 h-4 rounded text-blue-500 focus:ring-blue-400 bg-slate-900 border-white/20 cursor-pointer"
-                />
-                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <Globe className="w-4 h-4 text-blue-400" />
-                  <span>تنظیمات پروکسی تلگرام (MTProto / SOCKS5)</span>
-                </span>
-              </label>
-              <span className="text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                جهت عبور از فیلترینگ تلگرام
-              </span>
-            </div>
+          {/* Section 5: Live Interactive Preview */}
+          {connection && (
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <Eye className="w-4 h-4" />
+                <span>پیش‌نمایش خروجی نهایی پیام:</span>
+              </div>
 
-            {enableProxy && (
-              <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-500/30 space-y-3 animate-fadeIn">
-                <div className="flex items-center gap-4">
-                  <span className="text-xs font-bold text-slate-300">نوع پروکسی:</span>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="proxyType"
-                      value="mtproto"
-                      checked={proxyType === 'mtproto'}
-                      onChange={() => setProxyType('mtproto')}
-                      className="accent-blue-500"
-                    />
-                    <span>MTProto</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="proxyType"
-                      value="socks5"
-                      checked={proxyType === 'socks5'}
-                      onChange={() => setProxyType('socks5')}
-                      className="accent-blue-500"
-                    />
-                    <span>SOCKS5</span>
-                  </label>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-bold text-slate-300">
-                    آدرس پروکسی (Proxy URL / Connection String):
-                  </label>
-                  <input
-                    type="text"
-                    value={proxyUrl}
-                    onChange={(e) => setProxyUrl(e.target.value)}
-                    placeholder={proxyType === 'mtproto' ? "tg://proxy?server=...&port=...&secret=..." : "socks5://user:pass@host:port"}
-                    className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-blue-400 font-mono text-left dir-ltr"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <span className="text-[11px] text-slate-400 mb-1 block">متن نمونه کانال مبدأ ({connection?.sourceChannel || 'مبدأ'}):</span>
+                  <textarea
+                    value={sampleText}
+                    onChange={(e) => setSampleText(e.target.value)}
+                    rows={4}
+                    className="w-full p-2.5 text-xs rounded-xl focus:outline-none resize-none transition-all duration-200 preview-input-box"
                   />
                 </div>
+
+                <div>
+                  <span className="text-[11px] text-emerald-400 font-bold mb-1 flex items-center gap-1.5 block">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+                    <span>خروجی ارسال شونده به ({connection?.targetChannel || 'مقصد'}):</span>
+                  </span>
+                  <div className="w-full min-h-[96px] p-3 text-xs rounded-xl whitespace-pre-wrap font-sans transition-all duration-200 preview-output-box">
+                    {getTransformedPreview() || <span className="placeholder-text italic">پیش‌نمایش نشان داده خواهد شد...</span>}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
 
 
 
