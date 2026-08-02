@@ -215,7 +215,36 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
     }
 
     if (options.customBaseUrl && options.customBaseUrl.trim()) {
-      baseUrl = options.customBaseUrl.trim().replace(/\/+$/, "");
+      let rawUrl = options.customBaseUrl.trim().replace(/^["']|["']$/g, '');
+
+      // Unwrap Google redirect URLs if user pasted a Google search / link wrapper
+      if (rawUrl.includes("google.com/url")) {
+        try {
+          const parsed = new URL(rawUrl);
+          const target = parsed.searchParams.get("q") || parsed.searchParams.get("url");
+          if (target) rawUrl = target;
+        } catch (e) {}
+      }
+
+      // Ensure protocol
+      if (!/^https?:\/\//i.test(rawUrl)) {
+        rawUrl = `https://${rawUrl}`;
+      }
+
+      // Remove trailing slash and endpoints
+      rawUrl = rawUrl.replace(/\/+$/, "");
+      rawUrl = rawUrl.replace(/\/chat\/completions\/?$/i, "").replace(/\/completions\/?$/i, "");
+
+      // If URL doesn't end with a version segment like /v1, /v1beta, /v2 etc., append /v1
+      if (!/\/v\d+(\/.*)?$/i.test(rawUrl)) {
+        rawUrl = `${rawUrl}/v1`;
+      }
+      baseUrl = rawUrl;
+
+      // Special default for 9router proxies if model not explicitly specified
+      if (!options.model?.trim() && rawUrl.toLowerCase().includes("9router")) {
+        defaultModel = "Mino";
+      }
     }
 
     const modelName = options.model?.trim() || defaultModel;
@@ -234,7 +263,8 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
       headers["X-Title"] = "AutoRun AI Studio";
     }
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const endpoint = `${baseUrl}/chat/completions`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -247,9 +277,34 @@ async function executeAiRewrite(options: AiRewriteOptions): Promise<string> {
       }),
     });
 
-    const data: any = await response.json();
+    const rawResponseText = await response.text();
+    let data: any;
+
+    if (rawResponseText.trim().startsWith("<") || rawResponseText.includes("<title>Redirect Notice</title>")) {
+      throw new Error(`آدرس Base URL وارد شده یک صفحه وب (HTML یا لینک ریدایرکت) برمی‌گرداند. لطفاً آدرس مستقیم API را وارد کنید (مانند https://9router-production-6e0b.up.railway.app/v1).`);
+    }
+
+    try {
+      // Clean up potential trailing SSE delimiters or non-JSON suffixes (e.g. 9router returning data: [DONE])
+      const cleanedText = rawResponseText.replace(/data:\s*\[DONE\]\s*$/i, "").trim();
+      data = JSON.parse(cleanedText);
+    } catch (parseErr) {
+      // Fallback: search for JSON object boundary
+      const match = rawResponseText.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          data = JSON.parse(match[0]);
+        } catch (e) {
+          throw new Error(`پاسخ غیرمجاز یا نامعتبر از سرور ${provider}: ${rawResponseText.slice(0, 150)}`);
+        }
+      } else {
+        throw new Error(`پاسخ نامعتبر از سرور ${provider}: ${rawResponseText.slice(0, 150)}`);
+      }
+    }
+
     if (!response.ok) {
-      throw new Error(data?.error?.message || data?.message || `خطای سرویس ${provider} (${response.status})`);
+      const errMsg = data?.error?.message || data?.message || (typeof data?.error === 'string' ? data.error : null) || `خطای سرویس ${provider} (${response.status})`;
+      throw new Error(errMsg);
     }
 
     const result = data?.choices?.[0]?.message?.content?.trim();

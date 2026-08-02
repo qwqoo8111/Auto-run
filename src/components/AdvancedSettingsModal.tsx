@@ -129,6 +129,10 @@ const PROVIDERS: {
     keyLink: '',
     keyTip: 'پشتیبانی از Base URL اختصاصی، Groq, Together, Ollama یا API هر سایت دلخواه',
     models: [
+      { id: 'Mino', label: '9Router: Mino (مدل رایگان و هوشمند)' },
+      { id: 'oc/mimo-v2.5-free', label: '9Router: Mimo v2.5 Free' },
+      { id: 'oc/ling-3.0-flash-free', label: '9Router: Ling 3.0 Flash Free' },
+      { id: 'oc/deepseek-v4-flash-free', label: '9Router: DeepSeek v4 Flash Free' },
       { id: 'custom', label: 'نام مدل سفارشی دلخواه (تایپ دستی)' },
       { id: 'llama-3.3-70b-versatile', label: 'Groq: Llama 3.3 70B Versatile' },
       { id: 'deepseek-chat', label: 'DeepSeek Chat V3' },
@@ -1183,6 +1187,17 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                       />
                       <div className="flex gap-1.5 flex-wrap pt-0.5">
                         <span className="text-[10px] text-slate-400 flex items-center gap-1 font-bold">میانبرهای آماده:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiProvider('custom_openai');
+                            setAiCustomBaseUrl('https://9router-production-6e0b.up.railway.app/v1');
+                            setAiModel('Mino');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 border border-emerald-500/30 transition-all cursor-pointer font-medium"
+                        >
+                          📡 9Router (Railway)
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
