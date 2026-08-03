@@ -3220,6 +3220,60 @@ app.post("/api/connections", async (req, res) => {
 
     const resolvedBaleReplaceId = baleReplaceId?.trim() || settings?.baleReplaceId?.trim() || undefined;
 
+    // Find central or previous connection's AI settings if available
+    let fallbackAiSettings: any = {};
+    if (connections.length > 0) {
+      const connWithAi = connections.find((c) => c.settings?.aiProvider || c.settings?.aiApiKey);
+      if (connWithAi?.settings) {
+        fallbackAiSettings = {
+          aiProvider: connWithAi.settings.aiProvider,
+          aiModel: connWithAi.settings.aiModel,
+          aiApiKey: connWithAi.settings.aiApiKey,
+          geminiApiKey: connWithAi.settings.geminiApiKey,
+          aiCustomBaseUrl: connWithAi.settings.aiCustomBaseUrl,
+          useDefaultAiEngine: connWithAi.settings.useDefaultAiEngine,
+          aiPrompt: connWithAi.settings.aiPrompt,
+        };
+      }
+    }
+
+    const mergedSettings: AdvancedSettings = settings ? {
+      aiProvider: settings.aiProvider || fallbackAiSettings.aiProvider || 'gemini',
+      aiModel: settings.aiModel || fallbackAiSettings.aiModel || 'gemini-3.6-flash',
+      aiApiKey: settings.aiApiKey || fallbackAiSettings.aiApiKey || '',
+      geminiApiKey: settings.geminiApiKey || fallbackAiSettings.geminiApiKey || '',
+      aiCustomBaseUrl: settings.aiCustomBaseUrl || fallbackAiSettings.aiCustomBaseUrl || '',
+      useDefaultAiEngine: settings.useDefaultAiEngine !== undefined ? settings.useDefaultAiEngine : (fallbackAiSettings.useDefaultAiEngine !== undefined ? fallbackAiSettings.useDefaultAiEngine : true),
+      ...settings,
+    } : {
+      rewriteMode: "none",
+      aiPrompt: fallbackAiSettings.aiPrompt || "متن را به صورت جذاب، روان و خوانا بازنویسی کن:",
+      aiProvider: fallbackAiSettings.aiProvider || 'gemini',
+      aiModel: fallbackAiSettings.aiModel || 'gemini-3.6-flash',
+      aiApiKey: fallbackAiSettings.aiApiKey || '',
+      geminiApiKey: fallbackAiSettings.geminiApiKey || '',
+      aiCustomBaseUrl: fallbackAiSettings.aiCustomBaseUrl || '',
+      useDefaultAiEngine: fallbackAiSettings.useDefaultAiEngine !== undefined ? fallbackAiSettings.useDefaultAiEngine : true,
+      replacements: [],
+      signature: `🆔 ${cleanTarget}`,
+      removeSourceLinks: true,
+      cleanTagsAndLinks: false,
+      contentFilter: "all",
+      enableBale: !!enableBale,
+      baleTargetChannel: baleTargetChannel?.trim() || "",
+      baleBotToken: baleBotToken?.trim() || "",
+      baleReplaceId: resolvedBaleReplaceId || "",
+      enableX: !!enableX,
+      xTargetHandles: xTargetHandles?.trim() || "",
+      xApiKey: xApiKey?.trim() || "",
+      enableWeb: !!enableWeb,
+      webTargetUrl: webTargetUrl?.trim() || "",
+      preventDuplicates: true,
+      duplicateSimilarityThreshold: 80,
+      duplicateAction: 'skip',
+      checkMediaDuplicate: true,
+    };
+
     const newConnection: TelegramConnection = {
       id: `conn_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       sourceChannel: `@${cleanSource}`,
@@ -3243,28 +3297,7 @@ app.post("/api/connections", async (req, res) => {
       xApiKey: xApiKey?.trim() || undefined,
       enableWeb: !!enableWeb,
       webTargetUrl: webTargetUrl?.trim() || undefined,
-      settings: settings || {
-        rewriteMode: "none",
-        aiPrompt: "متن را به صورت جذاب، روان و خوانا بازنویسی کن:",
-        replacements: [],
-        signature: `🆔 ${cleanTarget}`,
-        removeSourceLinks: true,
-        cleanTagsAndLinks: false,
-        contentFilter: "all",
-        enableBale: !!enableBale,
-        baleTargetChannel: baleTargetChannel?.trim() || "",
-        baleBotToken: baleBotToken?.trim() || "",
-        baleReplaceId: resolvedBaleReplaceId || "",
-        enableX: !!enableX,
-        xTargetHandles: xTargetHandles?.trim() || "",
-        xApiKey: xApiKey?.trim() || "",
-        enableWeb: !!enableWeb,
-        webTargetUrl: webTargetUrl?.trim() || "",
-        preventDuplicates: true,
-        duplicateSimilarityThreshold: 80,
-        duplicateAction: 'skip',
-        checkMediaDuplicate: true,
-      },
+      settings: mergedSettings,
     };
 
     connections.unshift(newConnection);

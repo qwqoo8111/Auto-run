@@ -80,6 +80,17 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
     }
 
     try {
+      let initialSettings: any = undefined;
+      const cachedAi = localStorage.getItem('centralized_ai_settings');
+      if (cachedAi) {
+        try {
+          const parsed = JSON.parse(cachedAi);
+          if (parsed && (parsed.aiProvider || parsed.aiApiKey)) {
+            initialSettings = parsed;
+          }
+        } catch (e) {}
+      }
+
       await onSubmit({
         sourceType: 'telegram',
         sourceChannel: sourceChannel.trim(),
@@ -89,6 +100,7 @@ export const CreateConnectionForm: React.FC<CreateConnectionFormProps> = ({
         baleTargetChannel: enableBale ? baleTargetChannel.trim() : undefined,
         baleBotToken: enableBale ? baleBotToken.trim() : undefined,
         baleReplaceId: enableBale && baleReplaceId.trim() ? baleReplaceId.trim() : undefined,
+        settings: initialSettings,
       });
       // Clear fields upon success
       setSourceChannel('');

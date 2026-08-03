@@ -2310,38 +2310,77 @@ export const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
                     </div>
 
                     <div className="space-y-3">
-                      {/* Toggle for Default Engine */}
-                      <label className="flex items-start gap-3 p-3 rounded-xl bg-purple-900/30 border border-purple-500/40 cursor-pointer hover:bg-purple-900/40 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={useDefaultAiEngine}
-                          onChange={(e) => setUseDefaultAiEngine(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-400 rounded cursor-pointer"
-                        />
-                        <div className="text-xs">
-                          <span className="font-bold text-purple-200 block">
-                            استفاده از موتور پیش‌فرض هوش مصنوعی سیستم (موتور مرکزی)
-                          </span>
-                          <span className="text-slate-300 mt-0.5 block text-[11px] leading-relaxed">
-                            با فعال بودن این گزینه، عملیات بازنویسی از تنظیمات مرکزی هوش مصنوعی و کلید اصلی سیستم استفاده خواهد کرد.
-                          </span>
+                      {/* AI Engine Selection */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-xs font-bold text-purple-200">
+                          انتخاب موتور هوش مصنوعی (AI Engine):
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                          {PROVIDERS.map((p) => (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() => {
+                                handleProviderSelect(p.id);
+                                setUseDefaultAiEngine(false);
+                              }}
+                              className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                                aiProvider === p.id
+                                  ? 'bg-purple-600/30 border-purple-400 text-white font-bold ring-1 ring-purple-400 shadow-lg'
+                                  : 'bg-black/40 border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-200'
+                              }`}
+                            >
+                              <span className="text-base">{p.icon}</span>
+                              <span className="text-xs font-bold line-clamp-1">{p.name}</span>
+                            </button>
+                          ))}
                         </div>
-                      </label>
+                      </div>
 
-                      {!useDefaultAiEngine && (
-                        <div className="space-y-1.5 pt-1 animate-fadeIn">
-                          <label className="block text-xs font-bold text-purple-200">
-                            کلید API اختصاصی برای این کانال (اختیاری):
-                          </label>
+                      {/* AI Model Selection */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-purple-200">
+                          انتخاب مدل هوش مصنوعی:
+                        </label>
+                        <select
+                          value={aiModel}
+                          onChange={(e) => {
+                            setAiModel(e.target.value);
+                            setUseDefaultAiEngine(false);
+                          }}
+                          className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-purple-400 font-bold cursor-pointer"
+                        >
+                          {currentProviderConfig.models.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+
+                        {(aiModel === 'custom' || aiProvider === 'custom_openai') && (
                           <input
-                            type="password"
-                            value={aiApiKey}
-                            onChange={(e) => setAiApiKey(e.target.value)}
-                            placeholder="کلید API اختصاصی را وارد کنید..."
-                            className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                            type="text"
+                            value={customModelInput}
+                            onChange={(e) => setCustomModelInput(e.target.value)}
+                            placeholder="نام مدل سفارشی دلخواه..."
+                            className="w-full bg-black/70 border border-purple-500/40 px-3.5 py-2 text-xs rounded-xl text-white focus:outline-none focus:border-purple-300 font-mono mt-1"
                           />
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      {/* Optional Custom API Key */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-xs font-bold text-purple-200">
+                          کلید API اختصاصی (اختیاری):
+                        </label>
+                        <input
+                          type="password"
+                          value={aiApiKey}
+                          onChange={(e) => setAiApiKey(e.target.value)}
+                          placeholder="در صورت خالی بودن، از کلید API اصلی سیستم استفاده می‌شود..."
+                          className="w-full bg-black/60 border border-white/15 px-3 py-2 text-xs rounded-lg text-white focus:outline-none focus:border-purple-400 font-mono"
+                        />
+                      </div>
 
                       {/* Prompt & Instructions */}
                       <div className="space-y-1.5">
